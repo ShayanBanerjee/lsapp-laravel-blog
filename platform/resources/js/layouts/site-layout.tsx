@@ -11,6 +11,8 @@ import { useState, type ReactNode } from 'react';
 const NAV = [
     { label: 'Read', href: '/posts' },
     { label: 'Universes', href: '/universes' },
+    { label: 'Circles', href: '/circles' },
+    { label: 'Deep Field', href: '/deep-field' },
 ];
 
 export default function SiteLayout({ children, wide = false }: { children: ReactNode; wide?: boolean }) {
@@ -117,6 +119,9 @@ export default function SiteLayout({ children, wide = false }: { children: React
                                         <Link href="/personas" className="u-btn u-btn-ghost">
                                             Personas
                                         </Link>
+                                        <Link href="/letters" className="u-btn u-btn-ghost">
+                                            Letters
+                                        </Link>
                                     </>
                                 ) : (
                                     <>
@@ -147,8 +152,10 @@ export default function SiteLayout({ children, wide = false }: { children: React
                         Aetheris — a writing platform with six worlds.
                         {universe && <span className="ml-2 opacity-70">Currently in {universe.name}.</span>}
                     </p>
-                    <div className="flex gap-5">
+                    <div className="flex flex-wrap gap-5">
                         <Link href="/universes">Universes</Link>
+                        <Link href="/circles">Circles</Link>
+                        <Link href="/deep-field">Deep Field</Link>
                         <Link href="/upgrade">Pricing</Link>
                     </div>
                 </div>

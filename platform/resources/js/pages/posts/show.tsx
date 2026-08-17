@@ -1,22 +1,44 @@
+import { AdSlot, type Ad } from '@/components/ad-slot';
 import { Chip, Panel, Rail, SectionHeading, Swatch } from '@/components/metal';
 import { PostCard } from '@/components/post-card';
+import { Readable, type OwnHighlight, type Passage, type SelectionAnchor } from '@/components/readable';
+import { Reveal } from '@/components/reveal';
 import SiteLayout from '@/layouts/site-layout';
-import type { PostCard as PostCardData, Universe } from '@/types';
-import { Head, Link, router } from '@inertiajs/react';
-import { ArrowLeft, Clock, Pencil, Trash2 } from 'lucide-react';
+import type { PostCard as PostCardData, SharedData, Universe } from '@/types';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
+import { ArrowLeft, Clock, Highlighter, Mail, Pencil, Quote, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 
-interface Props {
-    post: PostCardData & { body: string; can: { update: boolean; delete: boolean } };
-    universe: Universe | null;
-    related: PostCardData[];
+interface ResponseRow {
+    id: number;
+    body: string;
+    author: string;
+    handle: string | null;
+    quote: string | null;
+    highlight_id: number | null;
+    created_human: string | null;
+    can_delete: boolean;
 }
 
-export default function PostShow({ post, universe, related }: Props) {
-    const destroy = () => {
-        if (window.confirm(`Delete “${post.title}”? This cannot be undone.`)) {
-            router.delete(`/posts/${post.slug}`);
-        }
-    };
+interface Props {
+    post: PostCardData & { body: string; marks: number | null; can: { update: boolean; delete: boolean } };
+    universe: Universe | null;
+    related: PostCardData[];
+    passages: Passage[];
+    myHighlights: OwnHighlight[];
+    responses: ResponseRow[];
+    ads: Ad[];
+}
+
+export default function PostShow({ post, universe, related, passages, myHighlights, responses, ads }: Props) {
+    const { auth } = usePage<SharedData>().props;
+    const signedIn = Boolean(auth.user);
+
+    const mark = (anchor: SelectionAnchor) => router.post(`/posts/${post.slug}/highlights`, anchor, { preserveScroll: true, preserveState: false });
+
+    const unmark = (id: number) => router.delete(`/highlights/${id}`, { preserveScroll: true, preserveState: false });
+
+    const totalMarks = passages.reduce((sum, passage) => sum + passage.marks, 0);
 
     return (
         <SiteLayout>
@@ -64,6 +86,15 @@ export default function PostShow({ post, universe, related }: Props) {
                             <Clock className="size-3.5" />
                             {post.reading_time} min read
                         </span>
+                        {totalMarks > 0 && (
+                            <>
+                                <span aria-hidden>·</span>
+                                <span className="inline-flex items-center gap-1.5" style={{ color: 'var(--u-accent)' }}>
+                                    <Highlighter className="size-3.5" />
+                                    {totalMarks} {totalMarks === 1 ? 'mark' : 'marks'}
+                                </span>
+                            </>
+                        )}
 
                         {(post.can.update || post.can.delete) && (
                             <span className="ml-auto flex gap-2">
@@ -74,7 +105,15 @@ export default function PostShow({ post, universe, related }: Props) {
                                     </Link>
                                 )}
                                 {post.can.delete && (
-                                    <button type="button" onClick={destroy} className="u-btn u-btn-ghost">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            if (window.confirm(`Delete “${post.title}”? This cannot be undone.`)) {
+                                                router.delete(`/posts/${post.slug}`);
+                                            }
+                                        }}
+                                        className="u-btn u-btn-ghost"
+                                    >
                                         <Trash2 className="size-3.5" />
                                         Delete
                                     </button>
@@ -90,12 +129,88 @@ export default function PostShow({ post, universe, related }: Props) {
                     </Panel>
                 )}
 
-                {/*
-                  Body is sanitized server-side to a tag allowlist on write
-                  (App\Support\HtmlSanitizer), which is what makes this safe.
-                */}
-                <div className="prose-u mx-auto max-w-2xl" dangerouslySetInnerHTML={{ __html: post.body }} />
+                {signedIn && (
+                    <p className="mx-auto mb-8 max-w-2xl text-center text-xs" style={{ color: 'var(--u-text-muted)' }}>
+                        Select any passage to mark it. Marks tell the writer which sentence landed.
+                    </p>
+                )}
+
+                <Readable html={post.body} passages={passages} own={myHighlights} canMark={signedIn} onMark={mark} onUnmark={unmark} />
             </article>
+
+            {passages.length > 0 && (
+                <section className="mx-auto mt-16 max-w-2xl">
+                    <Rail className="mb-10" />
+                    <h2 className="mb-5 text-[11px] font-semibold tracking-[0.18em] uppercase" style={{ color: 'var(--u-text-muted)' }}>
+                        What readers stopped on
+                    </h2>
+                    <div className="flex flex-col gap-3">
+                        {passages.slice(0, 5).map((passage) => (
+                            <Panel key={`${passage.block_index}-${passage.start_offset}`} className="p-5">
+                                <p className="font-display text-lg leading-snug italic">“{passage.quote}”</p>
+                                <p className="mt-2.5 text-xs" style={{ color: 'var(--u-accent)' }}>
+                                    marked by {passage.marks} {passage.marks === 1 ? 'reader' : 'readers'}
+                                </p>
+                            </Panel>
+                        ))}
+                    </div>
+                </section>
+            )}
+
+            <section className="mx-auto mt-16 max-w-2xl">
+                <Rail className="mb-10" />
+                <SectionHeading eyebrow="Responses" title={`${responses.length} ${responses.length === 1 ? 'response' : 'responses'}`} />
+
+                {signedIn ? (
+                    <ResponseForm slug={post.slug} />
+                ) : (
+                    <Panel className="mb-8 p-6 text-center">
+                        <p className="text-sm" style={{ color: 'var(--u-text-muted)' }}>
+                            <Link href="/login" style={{ color: 'var(--u-accent)' }}>
+                                Log in
+                            </Link>{' '}
+                            to mark passages and respond.
+                        </p>
+                    </Panel>
+                )}
+
+                <div className="mt-8 flex flex-col gap-3">
+                    {responses.map((response) => (
+                        <Panel key={response.id} className="p-5">
+                            {response.quote && (
+                                <p
+                                    className="mb-3 border-l-2 pl-3 text-sm italic"
+                                    style={{ borderColor: 'var(--u-accent)', color: 'var(--u-text-muted)' }}
+                                >
+                                    <Quote className="mr-1 inline size-3" />
+                                    {response.quote}
+                                </p>
+                            )}
+                            <p className="text-sm leading-relaxed whitespace-pre-line">{response.body}</p>
+                            <div className="mt-3 flex items-center gap-2 text-xs" style={{ color: 'var(--u-text-muted)' }}>
+                                <span style={{ color: 'var(--u-text)' }}>{response.author}</span>
+                                {response.handle && <span>@{response.handle}</span>}
+                                <span aria-hidden>·</span>
+                                <span>{response.created_human}</span>
+                                {response.can_delete && (
+                                    <button
+                                        type="button"
+                                        onClick={() => router.delete(`/responses/${response.id}`, { preserveScroll: true })}
+                                        className="ml-auto opacity-60 hover:opacity-100"
+                                        aria-label="Delete response"
+                                    >
+                                        <Trash2 className="size-3.5" />
+                                    </button>
+                                )}
+                            </div>
+                        </Panel>
+                    ))}
+                </div>
+            </section>
+
+            {signedIn && !post.can.update && <LetterForm slug={post.slug} />}
+
+            <AdSlot ads={ads} className="mx-auto mt-14 max-w-2xl" />
 
             {universe && (
                 <>
@@ -121,12 +236,109 @@ export default function PostShow({ post, universe, related }: Props) {
                 <section className="mt-16">
                     <SectionHeading eyebrow="Same world" title="More from this universe" />
                     <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                        {related.map((item) => (
-                            <PostCard key={item.slug} post={item} />
+                        {related.map((item, index) => (
+                            <Reveal key={item.slug} delay={index * 70}>
+                                <PostCard post={item} />
+                            </Reveal>
                         ))}
                     </div>
                 </section>
             )}
         </SiteLayout>
+    );
+}
+
+function ResponseForm({ slug }: { slug: string }) {
+    const { data, setData, post, processing, errors, reset } = useForm({ body: '' });
+
+    return (
+        <form
+            onSubmit={(event) => {
+                event.preventDefault();
+                post(`/posts/${slug}/responses`, { preserveScroll: true, onSuccess: () => reset() });
+            }}
+        >
+            <textarea
+                value={data.body}
+                onChange={(event) => setData('body', event.target.value)}
+                rows={3}
+                placeholder="Say something worth the writer's time."
+                aria-label="Your response"
+                className="u-field resize-y"
+            />
+            {errors.body && (
+                <p className="mt-2 text-sm" style={{ color: '#f0785a' }} role="alert">
+                    {errors.body}
+                </p>
+            )}
+            <button type="submit" disabled={processing || data.body.trim().length < 2} className="u-btn u-btn-primary mt-3">
+                Post response
+            </button>
+        </form>
+    );
+}
+
+/** A private note to the writer. No audience, therefore no performance. */
+function LetterForm({ slug }: { slug: string }) {
+    const [open, setOpen] = useState(false);
+    const { data, setData, post, processing, errors, reset } = useForm({ body: '' });
+
+    return (
+        <section className="mx-auto mt-14 max-w-2xl">
+            <Panel className="p-6 sm:p-8">
+                <div className="flex flex-wrap items-center gap-4">
+                    <Mail className="size-6 shrink-0" style={{ color: 'var(--u-accent)' }} />
+                    <div className="min-w-0 flex-1">
+                        <h3 className="font-display text-xl">Send the writer a letter</h3>
+                        <p className="mt-1 text-sm" style={{ color: 'var(--u-text-muted)' }}>
+                            Private, and nobody else will ever see it. This is the thing writers say they miss most.
+                        </p>
+                    </div>
+                    {!open && (
+                        <button type="button" onClick={() => setOpen(true)} className="u-btn u-btn-ghost">
+                            Write one
+                        </button>
+                    )}
+                </div>
+
+                {open && (
+                    <form
+                        className="mt-5"
+                        onSubmit={(event) => {
+                            event.preventDefault();
+                            post(`/posts/${slug}/letters`, {
+                                preserveScroll: true,
+                                onSuccess: () => {
+                                    reset();
+                                    setOpen(false);
+                                },
+                            });
+                        }}
+                    >
+                        <textarea
+                            value={data.body}
+                            onChange={(event) => setData('body', event.target.value)}
+                            rows={4}
+                            placeholder="What did this piece do for you?"
+                            aria-label="Your letter"
+                            className="u-field resize-y"
+                        />
+                        {errors.body && (
+                            <p className="mt-2 text-sm" style={{ color: '#f0785a' }} role="alert">
+                                {errors.body}
+                            </p>
+                        )}
+                        <div className="mt-3 flex gap-2">
+                            <button type="submit" disabled={processing} className="u-btn u-btn-primary">
+                                Send privately
+                            </button>
+                            <button type="button" onClick={() => setOpen(false)} className="u-btn u-btn-ghost">
+                                Cancel
+                            </button>
+                        </div>
+                    </form>
+                )}
+            </Panel>
+        </section>
     );
 }

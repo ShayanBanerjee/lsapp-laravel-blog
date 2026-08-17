@@ -10,6 +10,7 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             UniverseSeeder::class,
+            CircleSeeder::class,
             DemoContentSeeder::class,
         ]);
     }

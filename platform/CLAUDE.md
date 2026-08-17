@@ -4,6 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Aetheris** — a writing platform where each writer holds several personas, each living in one of six themed universes. The universe a piece belongs to determines how the entire interface looks while reading or writing it.
 
+**Read [../STRATEGY.md](../STRATEGY.md) before adding features.** It sets out why this platform exists (what text can do that video structurally cannot) and derives the feature set from that. Every feature here should be traceable to a claim in it; anything that is not is decoration.
+
 This directory is the active app. The repo root holds the frozen Laravel 5.6 original; see [../CLAUDE.md](../CLAUDE.md).
 
 ## Commands
@@ -60,6 +62,44 @@ This is the part worth understanding before changing anything visual.
 Every one of them checks `prefers-reduced-motion` and **degrades to the finished state, never to missing content** — `useReveal` returns `visible: true` immediately under reduced motion, and `.u-reveal` is forced visible in CSS as a second line of defence. If you add an animation that hides content before revealing it, it must do the same.
 
 `usePointerSpecular` also no-ops on touch (`hover: none`) and coalesces pointer events into one write per animation frame.
+
+
+### The community layer — the core loop
+
+The product thesis in one line: **the passage is the atom, and writers quit because of silence.** Both lead to the same primitive.
+
+- **`highlights`** — a mark on a passage, not a like on an article. Anchored as *(block index, start offset, end offset)* into that block's plain text. Whole-document offsets would invalidate every mark in a piece the moment an author edits an earlier paragraph; per-block offsets only break marks in the block that changed. `quote` is stored so a drifted mark can be re-anchored by search.
+- **`responses`** — anchored to a highlight where possible. Pointing at the text you are answering removes most arguments-with-things-nobody-said.
+- **`letters`** — private reader→writer notes. No audience, therefore no performance. Never make these public or countable in public; that is the entire feature.
+- **`circles`** — community by subject, not by follower graph.
+- **`prompts`** — per universe, because the blank page (not lack of ideas) is what stops pieces starting.
+
+`Post::markedPassages()` groups marks in SQL so identical passages collapse to one row with a count. That is the "which sentence worked" answer shown on the writer's desk, and the trending signal used *instead of* view counts.
+
+`Readable` (`components/readable.tsx`) paints marks into the rendered body. It repaints from `innerHTML` on every change rather than incrementally — nesting `<mark>` wrappers on update is the obvious bug otherwise — and wraps per text node rather than using `Range.surroundContents`, which throws whenever a selection crosses an inline element.
+
+### Ads and premium
+
+`App\Support\Ads` returns `[]` for an entitled user, so **no creative is serialized into the page at all**. Hiding ads client-side would leave them in the HTML, which is not what the customer paid for. Ads never appear inside a reading view — only between and after pieces.
+
+### Concurrency and performance
+
+- **Query budgets are tested.** `QueryBudgetTest` asserts query count does not grow with row count. An N+1 under load is not a slow page, it is connection-pool exhaustion presenting as site-wide timeouts.
+- **`Model::preventLazyLoading()`** is on outside production, so a missing eager load fails loudly in tests rather than quietly in prod.
+- **Universes are cached** (`Universe::cachedAll()`), invalidated by model events. They are read on every request and written approximately never.
+- **SQLite is configured for concurrency**: WAL journal mode plus a 5s busy timeout. The Laravel defaults (no WAL, zero timeout) make any two simultaneous writes fail with "database is locked". Verified with 8 parallel processes × 25 writes: zero failures. *This makes SQLite viable for dev and small deployments — it is still not the right production database. Use Postgres at real concurrency.*
+
+### Security
+
+- `HtmlSanitizer::clean()` — tag allowlist for post bodies (rich text, rendered with `dangerouslySetInnerHTML`).
+- `HtmlSanitizer::plain()` — for everything stored as text: responses, letters, quotes. **Not just `strip_tags`**, which keeps tag *contents*, so `<script>alert(1)</script>` survives as the visible string `alert(1)`.
+- `SecurityHeaders` middleware: CSP (the second line of defence behind the sanitizer), plus HSTS, nosniff, frame-deny, Permissions-Policy.
+- Rate limits: `marks` is generous (120/min — engaged readers mark a lot), `prose` is tight (12/min), `auth` is keyed by IP *and* email so an attacker cannot lock out a real user by burning their quota.
+- Ownership rules live in Policies, auto-discovered by name. Cross-object references are scoped in validation — e.g. a response's `highlight_id` must belong to *that post*, or it could be anchored to a passage in someone else's piece.
+
+### The Deep Field (`/deep-field`)
+
+One continuous zoom through all six universes, cosmos down to abyss. Driven by `useScrollProgress`, which is a **rAF loop gated by IntersectionObserver, deliberately not a `scroll` listener** — scroll events are delayed through iOS momentum scrolling, coalesced in some webviews, and not always emitted for programmatic scrolls. Under `prefers-reduced-motion` the entire mechanism is replaced by a plain vertical article carrying identical text.
 
 ### Data model
 

@@ -3,7 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\Post;
+use App\Models\Prompt;
+use App\Models\Response as ModelsResponse;
+use App\Support\Ads;
 use App\Support\HtmlSanitizer;
+use App\Support\PostPresenter;
 use App\Support\UniverseContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -20,7 +24,7 @@ class PostController extends Controller
 
     public function index(Request $request): Response
     {
-        $query = Post::published()->with(['persona.universe', 'universe']);
+        $query = Post::published()->with(['persona.universe', 'universe'])->withCount('highlights');
 
         if ($slug = $request->query('universe')) {
             $query->whereHas('universe', fn ($q) => $q->where('slug', $slug));
@@ -33,11 +37,12 @@ class PostController extends Controller
 
         return Inertia::render('posts/index', [
             'posts' => $query->latest('published_at')->paginate(9)->withQueryString()
-                ->through(fn (Post $post) => $this->card($post)),
+                ->through(fn (Post $post) => PostPresenter::card($post)),
             'filters' => [
                 'universe' => $request->query('universe'),
                 'q' => $request->query('q'),
             ],
+            'ads' => Ads::forRequest($request, 'feed'),
         ]);
     }
 
@@ -45,36 +50,86 @@ class PostController extends Controller
     {
         $this->authorize('view', $post);
 
-        $post->load(['persona.universe', 'universe', 'user']);
+        $user = $request->user();
+        $post->load(['persona.universe', 'universe', 'user'])->loadCount('highlights');
 
         $related = Post::published()
             ->where('universe_id', $post->universe_id)
             ->whereKeyNot($post->getKey())
             ->with(['persona.universe', 'universe'])
+            ->withCount('highlights')
             ->latest('published_at')
             ->limit(3)
             ->get()
-            ->map(fn (Post $related) => $this->card($related));
+            ->map(fn (Post $related) => PostPresenter::card($related));
+
+        $responses = $post->responses()
+            ->with(['persona:id,handle,display_name', 'user:id,name', 'highlight:id,quote'])
+            ->latest()
+            ->limit(100)
+            ->get()
+            ->map(fn (ModelsResponse $response) => [
+                'id' => $response->id,
+                'body' => $response->body,
+                'author' => $response->persona?->display_name ?? $response->user?->name ?? 'A reader',
+                'handle' => $response->persona?->handle,
+                'quote' => $response->highlight?->quote,
+                'highlight_id' => $response->highlight_id,
+                'created_human' => $response->created_at?->diffForHumans(),
+                'can_delete' => $user?->can('delete', $response) ?? false,
+            ]);
 
         return Inertia::render('posts/show', [
             'post' => [
-                ...$this->card($post),
+                ...PostPresenter::card($post),
                 'body' => $post->body,
                 'can' => [
-                    'update' => $request->user()?->can('update', $post) ?? false,
-                    'delete' => $request->user()?->can('delete', $post) ?? false,
+                    'update' => $user?->can('update', $post) ?? false,
+                    'delete' => $user?->can('delete', $post) ?? false,
                 ],
             ],
             // A post is always read in its own world.
-            'universe' => UniverseContext::serialize($post->universe, $request->user()),
+            'universe' => UniverseContext::serialize($post->universe, $user),
             'related' => $related,
+
+            // Passages marked by anyone, collapsed to one row per passage with
+            // a count — this is what gets underlined in the reading view.
+            'passages' => $post->markedPassages()->map(fn ($passage) => [
+                'block_index' => (int) $passage->block_index,
+                'start_offset' => (int) $passage->start_offset,
+                'end_offset' => (int) $passage->end_offset,
+                'quote' => $passage->quote,
+                'marks' => (int) $passage->marks,
+            ]),
+
+            // Just this reader's own marks, so the UI can show which are theirs
+            // and let them be removed.
+            'myHighlights' => $user
+                ? $post->highlights()->where('user_id', $user->id)->get()
+                    ->map(fn ($highlight) => [
+                        'id' => $highlight->id,
+                        'block_index' => $highlight->block_index,
+                        'start_offset' => $highlight->start_offset,
+                        'end_offset' => $highlight->end_offset,
+                    ])
+                : [],
+
+            'responses' => $responses,
+            'ads' => Ads::forRequest($request, 'post'),
         ]);
     }
 
     public function create(Request $request): Response
     {
+        // A prompt in the voice of the universe you are about to write in. The
+        // blank page — not lack of ideas — is what stops most pieces starting.
+        $universe = UniverseContext::activeUniverse($request);
+
         return Inertia::render('posts/create', [
             'personas' => $this->writablePersonas($request),
+            'prompts' => $universe
+                ? Prompt::where('universe_id', $universe->id)->inRandomOrder()->limit(3)->pluck('body')
+                : collect(),
         ]);
     }
 
@@ -110,7 +165,7 @@ class PostController extends Controller
 
         return Inertia::render('posts/edit', [
             'post' => [
-                ...$this->card($post->load(['persona.universe', 'universe'])),
+                ...PostPresenter::card($post->load(['persona.universe', 'universe'])),
                 'body' => $post->body,
                 'persona_id' => $post->persona_id,
             ],
@@ -217,27 +272,5 @@ class PostController extends Controller
                 'universe' => $persona->universe->preview(),
             ])
             ->values();
-    }
-
-    /** @return array<string, mixed> */
-    private function card(Post $post): array
-    {
-        return [
-            'id' => $post->id,
-            'slug' => $post->slug,
-            'title' => $post->title,
-            'excerpt' => $post->excerpt,
-            'cover_url' => $post->coverUrl(),
-            'status' => $post->status,
-            'reading_time' => $post->reading_time,
-            'published_at' => $post->published_at?->toIso8601String(),
-            'published_human' => $post->published_at?->format('j M Y'),
-            'persona' => $post->persona ? [
-                'handle' => $post->persona->handle,
-                'display_name' => $post->persona->display_name,
-                'avatar_path' => $post->persona->avatar_path,
-            ] : null,
-            'universe' => $post->universe?->preview(),
-        ];
     }
 }

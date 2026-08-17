@@ -1,3 +1,4 @@
+import { AdSlot, type Ad } from '@/components/ad-slot';
 import { EmptyState, Swatch } from '@/components/metal';
 import { PostCard } from '@/components/post-card';
 import SiteLayout from '@/layouts/site-layout';
@@ -15,9 +16,10 @@ interface Paginated<T> {
 interface Props {
     posts: Paginated<PostCardData>;
     filters: { universe: string | null; q: string | null };
+    ads: Ad[];
 }
 
-export default function PostsIndex({ posts, filters }: Props) {
+export default function PostsIndex({ posts, filters, ads }: Props) {
     const { universeIndex } = usePage<SharedData>().props;
     const [term, setTerm] = useState(filters.q ?? '');
 
@@ -115,6 +117,8 @@ export default function PostsIndex({ posts, filters }: Props) {
                     ))}
                 </div>
             )}
+
+            <AdSlot ads={ads} className="mt-12" />
 
             {posts.links.length > 3 && (
                 <nav className="mt-12 flex flex-wrap justify-center gap-1.5" aria-label="Pagination">

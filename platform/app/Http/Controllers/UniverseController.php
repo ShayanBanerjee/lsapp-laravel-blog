@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Post;
 use App\Models\Universe;
+use App\Support\PostPresenter;
 use App\Support\UniverseContext;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -35,22 +36,10 @@ class UniverseController extends Controller
         $posts = Post::published()
             ->where('universe_id', $universe->id)
             ->with(['persona', 'universe'])
+            ->withCount('highlights')
             ->latest('published_at')
             ->paginate(9)
-            ->through(fn (Post $post) => [
-                'id' => $post->id,
-                'slug' => $post->slug,
-                'title' => $post->title,
-                'excerpt' => $post->excerpt,
-                'cover_url' => $post->coverUrl(),
-                'reading_time' => $post->reading_time,
-                'published_human' => $post->published_at?->format('j M Y'),
-                'persona' => $post->persona ? [
-                    'handle' => $post->persona->handle,
-                    'display_name' => $post->persona->display_name,
-                ] : null,
-                'universe' => $post->universe?->preview(),
-            ]);
+            ->through(fn (Post $post) => PostPresenter::card($post));
 
         $writers = $universe->personas()->with('universe')->limit(8)->get()
             ->map(fn ($persona) => [

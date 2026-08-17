@@ -64,7 +64,7 @@ class HandleInertiaRequests extends Middleware
                 $user,
             ),
             // Identity + swatch only — never the full token set for locked worlds.
-            'universeIndex' => fn () => Universe::orderBy('sort_order')->get()->map(fn (Universe $universe) => [
+            'universeIndex' => fn () => Universe::cachedAll()->map(fn (Universe $universe) => [
                 ...$universe->preview(),
                 'locked' => $universe->is_premium && ! ($user?->canAccessUniverse($universe) ?? false),
             ]),

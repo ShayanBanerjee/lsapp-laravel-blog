@@ -2,9 +2,11 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Support\Facades\Cache;
 
 class Universe extends Model
 {
@@ -20,6 +22,33 @@ class Universe extends Model
             'hero_credit' => 'array',
             'is_premium' => 'boolean',
         ];
+    }
+
+    /**
+     * Universes are read on literally every request (shared Inertia props) and
+     * written approximately never — they are seeder-driven reference data.
+     * That is the exact shape that belongs in cache.
+     *
+     * Invalidated by the model events in booted(), so a change through Eloquent
+     * is picked up without anyone having to remember to flush.
+     */
+    public const CACHE_KEY = 'universes.all';
+
+    protected static function booted(): void
+    {
+        $forget = fn () => Cache::forget(self::CACHE_KEY);
+
+        static::saved($forget);
+        static::deleted($forget);
+    }
+
+    /** @return Collection<int, self> */
+    public static function cachedAll(): Collection
+    {
+        return Cache::rememberForever(
+            self::CACHE_KEY,
+            fn () => self::orderBy('sort_order')->get(),
+        );
     }
 
     public function getRouteKeyName(): string

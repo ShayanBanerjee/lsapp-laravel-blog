@@ -58,44 +58,132 @@ export function useReveal<T extends HTMLElement = HTMLDivElement>(threshold = 0.
 }
 
 /**
- * Vertical parallax driven by scroll position, in pixels of offset.
- * `strength` is how far the element drifts across a full viewport of scroll.
+ * Tracks an element's geometry every frame *while it is on screen*, and
+ * otherwise not at all.
+ *
+ * Deliberately not driven by the `scroll` event. Scroll events are unreliable
+ * as an animation clock: iOS Safari delays them through momentum scrolling,
+ * some embedded webviews coalesce them heavily, and programmatic scrolling does
+ * not always emit them. A rAF loop gated by IntersectionObserver reads the true
+ * position every frame, costs nothing when the element is off screen, and is
+ * what scroll-animation libraries settled on for the same reasons.
+ *
+ * `compute` must be cheap — it runs once per frame while visible.
  */
-export function useParallax<T extends HTMLElement = HTMLDivElement>(strength = 90) {
+function useFrameTracked<T extends HTMLElement>(compute: (node: T) => number, onValue: (value: number) => void, enabled = true) {
     const ref = useRef<T>(null);
-    const [offset, setOffset] = useState(0);
+    const computeRef = useRef(compute);
+    const onValueRef = useRef(onValue);
+
+    computeRef.current = compute;
+    onValueRef.current = onValue;
 
     useEffect(() => {
         const node = ref.current;
-
-        if (!node || prefersReducedMotion()) return;
+        if (!node || !enabled) return;
 
         let frame = 0;
+        let visible = false;
+        let last = Number.NaN;
 
-        const update = () => {
+        const tick = () => {
+            const value = computeRef.current(node);
+
+            // Only re-render when the value actually moved.
+            if (value !== last) {
+                last = value;
+                onValueRef.current(value);
+            }
+
+            if (visible) frame = window.requestAnimationFrame(tick);
+        };
+
+        const start = () => {
+            if (frame) return;
+            frame = window.requestAnimationFrame(tick);
+        };
+
+        const stop = () => {
+            if (frame) window.cancelAnimationFrame(frame);
             frame = 0;
-            const rect = node.getBoundingClientRect();
-            const progress = (rect.top + rect.height / 2) / window.innerHeight - 0.5;
-            setOffset(-progress * strength);
         };
 
-        const onScroll = () => {
-            // Coalesce scroll events into one write per frame.
-            if (!frame) frame = window.requestAnimationFrame(update);
-        };
+        // Without IntersectionObserver, fall back to always running rather than
+        // never running — a slightly hot loop beats a dead animation.
+        if (typeof IntersectionObserver === 'undefined') {
+            visible = true;
+            start();
 
-        update();
-        window.addEventListener('scroll', onScroll, { passive: true });
-        window.addEventListener('resize', onScroll, { passive: true });
+            return stop;
+        }
+
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                visible = entry.isIntersecting;
+                if (visible) start();
+                else stop();
+            },
+            { threshold: 0 },
+        );
+
+        observer.observe(node);
+        // Seed once so the element is correct before it is ever scrolled.
+        onValueRef.current(computeRef.current(node));
 
         return () => {
-            window.removeEventListener('scroll', onScroll);
-            window.removeEventListener('resize', onScroll);
-            if (frame) window.cancelAnimationFrame(frame);
+            observer.disconnect();
+            stop();
         };
-    }, [strength]);
+    }, [enabled]);
+
+    return ref;
+}
+
+/**
+ * Vertical parallax, in pixels of offset. `strength` is how far the element
+ * drifts across a full viewport of scroll.
+ */
+export function useParallax<T extends HTMLElement = HTMLDivElement>(strength = 90) {
+    const [offset, setOffset] = useState(0);
+    const enabled = !prefersReducedMotion();
+
+    const ref = useFrameTracked<T>(
+        (node) => {
+            const rect = node.getBoundingClientRect();
+            const progress = (rect.top + rect.height / 2) / window.innerHeight - 0.5;
+
+            // Round to whole pixels: sub-pixel churn re-renders every frame for
+            // no visible benefit.
+            return Math.round(-progress * strength);
+        },
+        setOffset,
+        enabled,
+    );
 
     return [ref, offset] as const;
+}
+
+/**
+ * Progress through a tall element, 0 at its top and 1 once its bottom reaches
+ * the viewport bottom. The clock for scroll-driven scenes.
+ */
+export function useScrollProgress<T extends HTMLElement = HTMLDivElement>(steps = 1000) {
+    const [progress, setProgress] = useState(0);
+
+    const ref = useFrameTracked<T>(
+        (node) => {
+            const total = node.scrollHeight - window.innerHeight;
+            if (total <= 0) return 0;
+
+            const raw = -node.getBoundingClientRect().top / total;
+
+            // Quantise so state updates stop once the value is visually stable.
+            return Math.round(Math.min(1, Math.max(0, raw)) * steps);
+        },
+        (value) => setProgress(value / steps),
+    );
+
+    return [ref, progress] as const;
 }
 
 /**

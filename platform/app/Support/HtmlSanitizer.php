@@ -52,6 +52,25 @@ class HtmlSanitizer
         return trim($html ?? '');
     }
 
+    /**
+     * Reduce untrusted input to plain text.
+     *
+     * For every field stored and displayed as text rather than markup:
+     * responses, letters, highlight quotes.
+     *
+     * Note this is *not* just strip_tags. strip_tags removes the tags but keeps
+     * their contents, so "<script>alert(1)</script>" becomes the visible string
+     * "alert(1)" — harmless where React escapes it, but garbage in the database
+     * and a live hazard the moment anyone renders the field as HTML.
+     */
+    public static function plain(string $input, int $max = 4000): string
+    {
+        $input = preg_replace('#<(script|style|template|iframe|object|embed)\b[^>]*>.*?</\1\s*>#is', '', $input) ?? $input;
+        $input = preg_replace('#<(script|style|template|iframe|object|embed)\b[^>]*/?>#i', '', $input) ?? $input;
+
+        return mb_substr(trim(strip_tags($input)), 0, $max);
+    }
+
     /** Plain-text excerpt for cards and meta descriptions. */
     public static function excerpt(string $html, int $length = 180): string
     {

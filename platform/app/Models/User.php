@@ -5,6 +5,7 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -71,6 +72,37 @@ class User extends Authenticatable
     public function themeEntitlements(): HasMany
     {
         return $this->hasMany(ThemeEntitlement::class);
+    }
+
+    public function highlights(): HasMany
+    {
+        return $this->hasMany(Highlight::class);
+    }
+
+    public function responses(): HasMany
+    {
+        return $this->hasMany(Response::class);
+    }
+
+    public function circles(): BelongsToMany
+    {
+        return $this->belongsToMany(Circle::class, 'circle_memberships')->withTimestamps();
+    }
+
+    public function lettersReceived(): HasMany
+    {
+        return $this->hasMany(Letter::class, 'to_user_id');
+    }
+
+    public function lettersSent(): HasMany
+    {
+        return $this->hasMany(Letter::class, 'from_user_id');
+    }
+
+    /** Free accounts see ads; paying removes them outright. */
+    public function seesAds(): bool
+    {
+        return ! $this->is_premium;
     }
 
     /**

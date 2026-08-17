@@ -3,14 +3,23 @@ import { useCountUp } from '@/hooks/use-motion';
 import SiteLayout from '@/layouts/site-layout';
 import type { PostCard, SharedData } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
-import { Clock, PenLine, Pencil } from 'lucide-react';
+import { Clock, Mail, PenLine, Pencil } from 'lucide-react';
+
+interface MarkedPassage {
+    slug: string;
+    title: string;
+    quote: string;
+    marks: number;
+}
 
 interface Props {
     posts: PostCard[];
     stats: { published: number; drafts: number; personas: number; following: number };
+    markedPassages: MarkedPassage[];
+    unreadLetters: number;
 }
 
-export default function Dashboard({ posts, stats }: Props) {
+export default function Dashboard({ posts, stats, markedPassages = [], unreadLetters = 0 }: Props) {
     const { auth } = usePage<SharedData>().props;
 
     return (
@@ -34,6 +43,47 @@ export default function Dashboard({ posts, stats }: Props) {
                     <StatTile key={stat.label} label={stat.label} value={stat.value} />
                 ))}
             </div>
+
+            {markedPassages.length > 0 && (
+                <section className="mb-12">
+                    <SectionHeading eyebrow="What landed" title="Sentences readers stopped on" />
+                    <p className="mb-6 max-w-2xl text-sm leading-relaxed" style={{ color: 'var(--u-text-muted)' }}>
+                        This is the feedback no other medium can give you. Not that a piece was liked — which line did the work.
+                    </p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        {markedPassages.map((passage, index) => (
+                            <Panel key={`${passage.slug}-${index}`} className="p-5">
+                                <p className="font-display text-lg leading-snug italic">“{passage.quote}”</p>
+                                <div className="mt-3 flex items-center gap-2 text-xs" style={{ color: 'var(--u-text-muted)' }}>
+                                    <Link href={`/posts/${passage.slug}`} className="truncate hover:underline">
+                                        {passage.title}
+                                    </Link>
+                                    <span className="ml-auto whitespace-nowrap" style={{ color: 'var(--u-accent)' }}>
+                                        {passage.marks} {passage.marks === 1 ? 'mark' : 'marks'}
+                                    </span>
+                                </div>
+                            </Panel>
+                        ))}
+                    </div>
+                </section>
+            )}
+
+            {unreadLetters > 0 && (
+                <Panel className="mb-12 flex flex-wrap items-center gap-5 p-6">
+                    <Mail className="size-6 shrink-0" style={{ color: 'var(--u-accent)' }} />
+                    <div className="min-w-0 flex-1">
+                        <h2 className="text-lg font-semibold">
+                            {unreadLetters} unread {unreadLetters === 1 ? 'letter' : 'letters'}
+                        </h2>
+                        <p className="mt-1 text-sm" style={{ color: 'var(--u-text-muted)' }}>
+                            Someone wrote to you privately about something you published.
+                        </p>
+                    </div>
+                    <Link href="/letters" className="u-btn u-btn-primary">
+                        Read them
+                    </Link>
+                </Panel>
+            )}
 
             {!auth.user?.is_premium && (
                 <Panel className="mb-12 flex flex-wrap items-center gap-5 p-6">

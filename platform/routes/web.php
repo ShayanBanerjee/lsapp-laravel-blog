@@ -1,10 +1,15 @@
 <?php
 
+use App\Http\Controllers\CircleController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DeepFieldController;
 use App\Http\Controllers\FollowController;
+use App\Http\Controllers\HighlightController;
 use App\Http\Controllers\HomeController;
+use App\Http\Controllers\LetterController;
 use App\Http\Controllers\PersonaController;
 use App\Http\Controllers\PostController;
+use App\Http\Controllers\ResponseController;
 use App\Http\Controllers\UniverseController;
 use App\Http\Controllers\UpgradeController;
 use Illuminate\Support\Facades\Route;
@@ -27,6 +32,12 @@ Route::resource('posts', PostController::class)
 
 Route::get('upgrade', [UpgradeController::class, 'show'])->name('upgrade.show');
 
+Route::get('circles', [CircleController::class, 'index'])->name('circles.index');
+Route::get('circles/{circle}', [CircleController::class, 'show'])->name('circles.show');
+
+// The Deep Field — one continuous descent through all six universes.
+Route::get('deep-field', DeepFieldController::class)->name('deep-field');
+
 Route::middleware(['auth'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
 
@@ -47,6 +58,28 @@ Route::middleware(['auth'])->group(function () {
 
     Route::post('upgrade', [UpgradeController::class, 'activate'])->name('upgrade.activate');
     Route::delete('upgrade', [UpgradeController::class, 'deactivate'])->name('upgrade.deactivate');
+
+    Route::post('circles/{circle}/membership', [CircleController::class, 'toggle'])->name('circles.toggle');
+    Route::get('letters', [LetterController::class, 'index'])->name('letters.index');
+
+    /*
+     * User-generated content endpoints are rate limited.
+     *
+     * Marking is deliberately generous — an engaged reader genuinely marks many
+     * passages in one sitting — while writing prose is throttled harder, since
+     * that is where spam and abuse actually arrive.
+     */
+    Route::middleware('throttle:marks')->group(function () {
+        Route::post('posts/{post}/highlights', [HighlightController::class, 'store'])->name('highlights.store');
+        Route::delete('highlights/{highlight}', [HighlightController::class, 'destroy'])->name('highlights.destroy');
+    });
+
+    Route::middleware('throttle:prose')->group(function () {
+        Route::post('posts/{post}/responses', [ResponseController::class, 'store'])->name('responses.store');
+        Route::post('posts/{post}/letters', [LetterController::class, 'store'])->name('letters.store');
+    });
+
+    Route::delete('responses/{response}', [ResponseController::class, 'destroy'])->name('responses.destroy');
 });
 
 require __DIR__.'/settings.php';

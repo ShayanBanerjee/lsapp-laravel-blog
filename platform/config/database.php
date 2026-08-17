@@ -38,9 +38,28 @@ return [
             'database' => env('DB_DATABASE', database_path('database.sqlite')),
             'prefix' => '',
             'foreign_key_constraints' => env('DB_FOREIGN_KEYS', true),
-            'busy_timeout' => null,
-            'journal_mode' => null,
-            'synchronous' => null,
+
+            /*
+             * Concurrency settings. The Laravel defaults (all null) are the
+             * worst case for a web app serving simultaneous requests:
+             *
+             * - Without WAL, SQLite uses a rollback journal, where a single
+             *   writer blocks every reader.
+             * - With busy_timeout unset it defaults to 0, so any request that
+             *   arrives while another is writing fails instantly with
+             *   "database is locked" rather than waiting a few milliseconds.
+             *
+             * WAL lets readers proceed concurrently with one writer, and a
+             * timeout turns a contended write into a short wait instead of a
+             * 500. synchronous=NORMAL is the documented safe pairing with WAL.
+             *
+             * This makes SQLite viable for development and small deployments.
+             * It does not make it the right production database — see
+             * CLAUDE.md; Postgres is the answer at real concurrency.
+             */
+            'busy_timeout' => env('DB_BUSY_TIMEOUT', 5000),
+            'journal_mode' => env('DB_JOURNAL_MODE', 'WAL'),
+            'synchronous' => env('DB_SYNCHRONOUS', 'NORMAL'),
         ],
 
         'mysql' => [

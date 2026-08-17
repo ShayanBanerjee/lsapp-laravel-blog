@@ -2,8 +2,11 @@
 
 namespace Database\Seeders;
 
+use App\Models\Circle;
+use App\Models\Highlight;
 use App\Models\Persona;
 use App\Models\Post;
+use App\Models\Response;
 use App\Models\Universe;
 use App\Models\User;
 use App\Support\HtmlSanitizer;
@@ -14,6 +17,12 @@ use Illuminate\Support\Str;
 class DemoContentSeeder extends Seeder
 {
     public function run(): void
+    {
+        $this->seedWriter();
+        $this->seedReaders();
+    }
+
+    private function seedWriter(): void
     {
         $demo = User::updateOrCreate(
             ['email' => 'writer@example.com'],
@@ -171,5 +180,75 @@ class DemoContentSeeder extends Seeder
                 ],
             ],
         ];
+    }
+
+    /**
+     * A handful of readers who have marked passages, so the platform's core
+     * loop is visible on a fresh install rather than looking like a dead site.
+     *
+     * Marks are placed on the opening sentence of the first block of each
+     * piece, which is guaranteed to exist for the seeded bodies.
+     */
+    private function seedReaders(): void
+    {
+        $readers = collect(['Ada', 'Ines', 'Marcus', 'Wren', 'Tomas'])
+            ->map(fn (string $name, int $index) => User::updateOrCreate(
+                ['email' => strtolower($name).'@example.com'],
+                ['name' => $name, 'password' => Hash::make('password'), 'email_verified_at' => now()],
+            ));
+
+        foreach (Post::published()->get() as $post) {
+            // Strip to the first block's text so the offsets are real.
+            $blocks = preg_split('#</p>#i', $post->body) ?: [];
+            $first = trim(strip_tags($blocks[0] ?? ''));
+
+            if (mb_strlen($first) < 40) {
+                continue;
+            }
+
+            // One shared passage everyone marks, plus a second that fewer do —
+            // enough for the "what readers stopped on" ranking to mean something.
+            $sentenceEnd = mb_strpos($first, '.') ?: 60;
+            $passages = [
+                ['start' => 0, 'end' => min($sentenceEnd + 1, mb_strlen($first))],
+                ['start' => 0, 'end' => min(38, mb_strlen($first))],
+            ];
+
+            foreach ($passages as $index => $passage) {
+                $markers = $readers->take($index === 0 ? 4 : 2);
+
+                foreach ($markers as $reader) {
+                    Highlight::firstOrCreate([
+                        'post_id' => $post->id,
+                        'user_id' => $reader->id,
+                        'block_index' => 0,
+                        'start_offset' => $passage['start'],
+                        'end_offset' => $passage['end'],
+                    ], [
+                        'quote' => mb_substr($first, $passage['start'], $passage['end'] - $passage['start']),
+                    ]);
+                }
+            }
+
+            // A response anchored to the most-marked passage.
+            $anchor = Highlight::where('post_id', $post->id)->first();
+
+            if ($anchor) {
+                Response::firstOrCreate([
+                    'post_id' => $post->id,
+                    'user_id' => $readers->last()->id,
+                    'highlight_id' => $anchor->id,
+                ], [
+                    'body' => 'I have read this three times now and it keeps opening further. Thank you for writing it down.',
+                ]);
+            }
+        }
+
+        // Put every reader in a couple of circles so the rooms are not empty.
+        $circles = Circle::orderBy('sort_order')->take(3)->get();
+
+        foreach ($readers as $reader) {
+            $reader->circles()->syncWithoutDetaching($circles->pluck('id')->all());
+        }
     }
 }

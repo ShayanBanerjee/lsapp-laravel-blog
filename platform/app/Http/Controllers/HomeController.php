@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Post;
 use App\Models\Universe;
+use App\Support\PostPresenter;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -15,20 +16,9 @@ class HomeController extends Controller
         $user = $request->user();
 
         $featured = Post::published()->with(['persona', 'universe'])
+            ->withCount('highlights')
             ->latest('published_at')->limit(6)->get()
-            ->map(fn (Post $post) => [
-                'slug' => $post->slug,
-                'title' => $post->title,
-                'excerpt' => $post->excerpt,
-                'cover_url' => $post->coverUrl(),
-                'reading_time' => $post->reading_time,
-                'published_human' => $post->published_at?->format('j M Y'),
-                'persona' => $post->persona ? [
-                    'handle' => $post->persona->handle,
-                    'display_name' => $post->persona->display_name,
-                ] : null,
-                'universe' => $post->universe?->preview(),
-            ]);
+            ->map(fn (Post $post) => PostPresenter::card($post));
 
         return Inertia::render('welcome', [
             'featured' => $featured,

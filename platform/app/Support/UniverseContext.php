@@ -50,7 +50,7 @@ class UniverseContext
             return $persona->universe;
         }
 
-        return Universe::where('slug', self::FALLBACK_SLUG)->first();
+        return Universe::cachedAll()->firstWhere('slug', self::FALLBACK_SLUG);
     }
 
     /**
@@ -76,7 +76,7 @@ class UniverseContext
             return $universe->tokens() + ['locked' => false];
         }
 
-        $fallback = Universe::where('slug', self::FALLBACK_SLUG)->first();
+        $fallback = Universe::cachedAll()->firstWhere('slug', self::FALLBACK_SLUG);
 
         return $universe->preview() + [
             'locked' => true,
