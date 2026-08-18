@@ -1,16 +1,18 @@
 import { Flash } from '@/components/flash';
+import { Logo } from '@/components/logo';
 import { PersonaSwitcher } from '@/components/persona-switcher';
 import { UniverseRoot } from '@/components/universe-root';
 import { useUniverse } from '@/hooks/use-universe';
 import { cn } from '@/lib/utils';
 import type { SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { Menu, PenLine, Sparkles, X } from 'lucide-react';
+import { Menu, PenLine, X } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
 const NAV = [
     { label: 'Read', href: '/posts' },
     { label: 'Universes', href: '/universes' },
+    { label: 'Subjects', href: '/categories' },
     { label: 'Circles', href: '/circles' },
     { label: 'Deep Field', href: '/deep-field' },
 ];
@@ -30,9 +32,8 @@ export default function SiteLayout({ children, wide = false }: { children: React
 
             <header className="frost sticky top-0 z-50">
                 <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-5 sm:px-8">
-                    <Link href="/" className="font-display flex items-center gap-2.5 text-xl tracking-tight">
-                        <Sparkles className="size-[18px]" style={{ color: 'var(--u-accent)' }} />
-                        Aetheris
+                    <Link href="/" aria-label="Inkfathom home">
+                        <Logo size={26} />
                     </Link>
 
                     <nav className="ml-6 hidden items-center gap-1 md:flex">
@@ -63,6 +64,9 @@ export default function SiteLayout({ children, wide = false }: { children: React
                                 <Link href="/write" className="u-btn u-btn-primary">
                                     <PenLine className="size-4" />
                                     Write
+                                </Link>
+                                <Link href="/library" className="u-btn u-btn-ghost" aria-label="Your library">
+                                    Library
                                 </Link>
                                 <Link href="/dashboard" className="u-btn u-btn-ghost">
                                     Desk
@@ -122,6 +126,9 @@ export default function SiteLayout({ children, wide = false }: { children: React
                                         <Link href="/letters" className="u-btn u-btn-ghost">
                                             Letters
                                         </Link>
+                                        <Link href="/settings/reading" className="u-btn u-btn-ghost">
+                                            Reading settings
+                                        </Link>
                                     </>
                                 ) : (
                                     <>
@@ -149,14 +156,16 @@ export default function SiteLayout({ children, wide = false }: { children: React
                     style={{ color: 'var(--u-text-muted)' }}
                 >
                     <p>
-                        Aetheris — a writing platform with six worlds.
+                        Inkfathom — a writing platform with six worlds.
                         {universe && <span className="ml-2 opacity-70">Currently in {universe.name}.</span>}
                     </p>
                     <div className="flex flex-wrap gap-5">
                         <Link href="/universes">Universes</Link>
+                        <Link href="/categories">Subjects</Link>
                         <Link href="/circles">Circles</Link>
                         <Link href="/deep-field">Deep Field</Link>
                         <Link href="/upgrade">Pricing</Link>
+                        <a href="/feed.xml">RSS</a>
                     </div>
                 </div>
             </footer>

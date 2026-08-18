@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Post;
 use App\Models\Response;
 use App\Support\HtmlSanitizer;
+use App\Support\Moderation\Moderator;
 use App\Support\UniverseContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -12,7 +13,7 @@ use Illuminate\Validation\Rule;
 
 class ResponseController extends Controller
 {
-    public function store(Request $request, Post $post): RedirectResponse
+    public function store(Request $request, Post $post, Moderator $moderator): RedirectResponse
     {
         $this->authorize('view', $post);
 
@@ -30,6 +31,23 @@ class ResponseController extends Controller
             ],
         ]);
 
+        $body = HtmlSanitizer::plain($data['body']);
+        $verdict = $moderator->check($body);
+
+        /*
+         * Blocking is reserved for slurs and directed sexual harassment. Every
+         * other kind of hostility — including rude, angry, and profane
+         * disagreement — goes up. A writing platform that filters strong
+         * opinion is not protecting anyone, it is just quieter.
+         */
+        if ($verdict->isBlocked()) {
+            return back()->withErrors([
+                'body' => $verdict->category === 'sexual_harassment'
+                    ? 'That reads as sexual harassment directed at a person. Say the substantive part instead.'
+                    : 'That contains a slur. Disagree as strongly as you like — not like that.',
+            ])->withInput();
+        }
+
         Response::create([
             'post_id' => $post->id,
             'user_id' => $request->user()->id,
@@ -38,7 +56,10 @@ class ResponseController extends Controller
             'parent_id' => $data['parent_id'] ?? null,
             // Stored and rendered as plain text — responses are not rich text,
             // so there is no reason to accept markup at all.
-            'body' => HtmlSanitizer::plain($data['body']),
+            'body' => $body,
+            // Uncertain cases publish immediately and are queued for a human.
+            'flagged_category' => $verdict->needsReview() ? $verdict->category : null,
+            'flagged_at' => $verdict->needsReview() ? now() : null,
         ]);
 
         return back(fallback: route('posts.show', $post))->with('success', 'Response posted.');

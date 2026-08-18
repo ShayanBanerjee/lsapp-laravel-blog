@@ -3,11 +3,13 @@ import { Chip, Panel, Rail, SectionHeading, Swatch } from '@/components/metal';
 import { PostCard } from '@/components/post-card';
 import { Readable, type OwnHighlight, type Passage, type SelectionAnchor } from '@/components/readable';
 import { Reveal } from '@/components/reveal';
+import { SeoHead, type SeoPayload } from '@/components/seo-head';
+import { ShareMenu } from '@/components/share-menu';
 import SiteLayout from '@/layouts/site-layout';
 import type { PostCard as PostCardData, SharedData, Universe } from '@/types';
-import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
-import { ArrowLeft, Clock, Highlighter, Mail, Pencil, Quote, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { Link, router, useForm, usePage } from '@inertiajs/react';
+import { ArrowLeft, Bookmark, Clock, Highlighter, Mail, Pencil, Quote, Star, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 interface ResponseRow {
     id: number;
@@ -27,10 +29,12 @@ interface Props {
     passages: Passage[];
     myHighlights: OwnHighlight[];
     responses: ResponseRow[];
+    bookmarks: { saved: boolean; starred: boolean };
+    seo: SeoPayload;
     ads: Ad[];
 }
 
-export default function PostShow({ post, universe, related, passages, myHighlights, responses, ads }: Props) {
+export default function PostShow({ post, universe, related, passages, myHighlights, responses, bookmarks, seo, ads }: Props) {
     const { auth } = usePage<SharedData>().props;
     const signedIn = Boolean(auth.user);
 
@@ -40,11 +44,24 @@ export default function PostShow({ post, universe, related, passages, myHighligh
 
     const totalMarks = passages.reduce((sum, passage) => sum + passage.marks, 0);
 
+    // If the reader has text selected, Share offers that sentence rather than
+    // the headline — a quote travels further than a title.
+    const [sharedQuote, setSharedQuote] = useState<string | null>(null);
+
+    useEffect(() => {
+        const onSelect = () => {
+            const text = window.getSelection()?.toString().trim() ?? '';
+            setSharedQuote(text.length > 8 && text.length < 400 ? text : null);
+        };
+
+        document.addEventListener('selectionchange', onSelect);
+
+        return () => document.removeEventListener('selectionchange', onSelect);
+    }, []);
+
     return (
         <SiteLayout>
-            <Head title={post.title}>
-                <meta name="description" content={post.excerpt ?? ''} />
-            </Head>
+            <SeoHead seo={seo} />
 
             <Link href="/posts" className="mb-8 inline-flex items-center gap-2 text-sm" style={{ color: 'var(--u-text-muted)' }}>
                 <ArrowLeft className="size-4" />
@@ -65,6 +82,11 @@ export default function PostShow({ post, universe, related, passages, myHighligh
                             </Link>
                         )}
                         {post.status === 'draft' && <Chip tone="accent">Draft — only you can see this</Chip>}
+                        {post.categories?.map((category) => (
+                            <Link key={category.slug} href={`/categories/${category.slug}`}>
+                                <Chip>{category.name}</Chip>
+                            </Link>
+                        ))}
                     </div>
 
                     <h1 className="font-display text-4xl leading-[1.08] sm:text-6xl">{post.title}</h1>
@@ -96,8 +118,37 @@ export default function PostShow({ post, universe, related, passages, myHighligh
                             </>
                         )}
 
+                        <span className="ml-auto flex flex-wrap items-center gap-2">
+                            {signedIn && (
+                                <>
+                                    <button
+                                        type="button"
+                                        onClick={() => router.post(`/posts/${post.slug}/bookmark`, { kind: 'saved' }, { preserveScroll: true })}
+                                        className="u-btn u-btn-ghost"
+                                        aria-pressed={bookmarks.saved}
+                                        style={bookmarks.saved ? { borderColor: 'var(--u-accent)', color: 'var(--u-accent)' } : undefined}
+                                    >
+                                        <Bookmark className={bookmarks.saved ? 'size-3.5 fill-current' : 'size-3.5'} />
+                                        {bookmarks.saved ? 'Saved' : 'Save'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => router.post(`/posts/${post.slug}/bookmark`, { kind: 'starred' }, { preserveScroll: true })}
+                                        className="u-btn u-btn-ghost"
+                                        aria-pressed={bookmarks.starred}
+                                        aria-label={bookmarks.starred ? 'Unstar' : 'Star'}
+                                        style={bookmarks.starred ? { borderColor: 'var(--u-accent)', color: 'var(--u-accent)' } : undefined}
+                                    >
+                                        <Star className={bookmarks.starred ? 'size-3.5 fill-current' : 'size-3.5'} />
+                                    </button>
+                                </>
+                            )}
+
+                            <ShareMenu url={seo.canonical} title={post.title} quote={sharedQuote} />
+                        </span>
+
                         {(post.can.update || post.can.delete) && (
-                            <span className="ml-auto flex gap-2">
+                            <span className="flex gap-2">
                                 {post.can.update && (
                                     <Link href={`/posts/${post.slug}/edit`} className="u-btn u-btn-ghost">
                                         <Pencil className="size-3.5" />

@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\Category;
 use App\Models\Circle;
 use App\Models\Highlight;
 use App\Models\Persona;
@@ -52,7 +53,7 @@ class DemoContentSeeder extends Seeder
                     ->map(fn (string $paragraph) => '<p>'.e($paragraph).'</p>')
                     ->implode('');
 
-                Post::updateOrCreate(
+                $created = Post::updateOrCreate(
                     ['slug' => Str::slug($post['title'])],
                     [
                         'user_id' => $demo->id,
@@ -71,6 +72,13 @@ class DemoContentSeeder extends Seeder
                         'published_at' => now()->subDays(($index + 1) * 3 + random_int(0, 2)),
                     ]
                 );
+
+                // Give each demo piece a plausible subject so category browsing
+                // has something to show.
+                if (isset($data['categories'])) {
+                    $ids = Category::whereIn('slug', $data['categories'])->pluck('id');
+                    $created->categories()->syncWithoutDetaching($ids);
+                }
             }
         }
     }
@@ -81,6 +89,7 @@ class DemoContentSeeder extends Seeder
         return [
             'cosmos' => [
                 'handle' => 'longlight',
+                'categories' => ['science', 'philosophy'],
                 'display_name' => 'Long Light',
                 'bio' => 'Writing at the speed of arriving photons. Mostly about distance.',
                 'posts' => [
@@ -103,6 +112,7 @@ class DemoContentSeeder extends Seeder
             ],
             'nature' => [
                 'handle' => 'underloam',
+                'categories' => ['nature-environment', 'personal-essay'],
                 'display_name' => 'Under Loam',
                 'bio' => 'Field notes from ground level. Slow, damp, specific.',
                 'posts' => [
@@ -125,6 +135,7 @@ class DemoContentSeeder extends Seeder
             ],
             'mountains' => [
                 'handle' => 'coldface',
+                'categories' => ['travel', 'personal-essay'],
                 'display_name' => 'Cold Face',
                 'bio' => 'Above the treeline. Short sentences, thin air.',
                 'posts' => [
@@ -139,6 +150,7 @@ class DemoContentSeeder extends Seeder
             ],
             'jungle' => [
                 'handle' => 'canopywire',
+                'categories' => ['nature-environment', 'science'],
                 'display_name' => 'Canopy Wire',
                 'bio' => 'Dispatches from the loud green dark.',
                 'posts' => [
@@ -153,6 +165,7 @@ class DemoContentSeeder extends Seeder
             ],
             'abyss' => [
                 'handle' => 'pressuredepth',
+                'categories' => ['science', 'nature-environment'],
                 'display_name' => 'Pressure Depth',
                 'bio' => 'Below the last of the light.',
                 'posts' => [
@@ -167,6 +180,7 @@ class DemoContentSeeder extends Seeder
             ],
             'desert' => [
                 'handle' => 'saltflat',
+                'categories' => ['craft-writing', 'travel'],
                 'display_name' => 'Salt Flat',
                 'bio' => 'Writing with the adjectives burned off.',
                 'posts' => [

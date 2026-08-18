@@ -50,7 +50,7 @@ class Ads
             'slot' => $slot,
             'kind' => 'house',
             'title' => 'Read without interruption',
-            'body' => 'Premium removes every ad on Aetheris, opens all six universes, and lifts the persona limit.',
+            'body' => 'Premium removes every ad on Inkfathom, opens all six universes, and lifts the persona limit.',
             'cta' => 'See premium',
             'href' => '/upgrade',
         ];

@@ -36,14 +36,53 @@ return [
     ],
 
     /*
+     * Social sign-in. Each block stays empty until you add credentials, and
+     * SocialAuthController returns 503 for an unconfigured provider rather
+     * than exposing a broken redirect.
+     */
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        'redirect' => env('GOOGLE_REDIRECT_URI', '/auth/google/callback'),
+    ],
+
+    'facebook' => [
+        'client_id' => env('FACEBOOK_CLIENT_ID'),
+        'client_secret' => env('FACEBOOK_CLIENT_SECRET'),
+        'redirect' => env('FACEBOOK_REDIRECT_URI', '/auth/facebook/callback'),
+    ],
+
+    'github' => [
+        'client_id' => env('GITHUB_CLIENT_ID'),
+        'client_secret' => env('GITHUB_CLIENT_SECRET'),
+        'redirect' => env('GITHUB_REDIRECT_URI', '/auth/github/callback'),
+    ],
+
+    /*
+     * Comment moderation.
+     *
+     * `driver` selects the Moderator implementation. The default lexicon is
+     * local, free, auditable, and narrow by design — see LexiconModerator for
+     * what it deliberately does not catch.
+     */
+    'moderation' => [
+        'driver' => env('MODERATION_DRIVER', 'lexicon'),
+    ],
+
+    /*
      * While `secret` is null the app runs its demo upgrade path: premium can be
      * toggled from /upgrade with no payment taken. Setting a real key disables
      * that route (see UpgradeController) — wire Cashier before you set it.
      */
+    'billing' => [
+        'driver' => env('BILLING_DRIVER', 'stripe'),
+    ],
+
     'stripe' => [
         'key' => env('STRIPE_KEY'),
         'secret' => env('STRIPE_SECRET'),
         'price_id' => env('STRIPE_PRICE_ID'),
+        'webhook_secret' => env('STRIPE_WEBHOOK_SECRET'),
     ],
 
 ];

@@ -1,6 +1,9 @@
-# Aetheris
+# Inkfathom
 
 **A writing platform where every writer contains more than one person.**
+
+> *ink* + *fathom* — to sound the depth of something, and to understand it.
+> Domain: **inkfathom.com** — confirmed available at the .com registry on 18 Aug 2026. Not yet registered; verify and buy before announcing.
 
 Each writer holds several *personas*, and each persona lives in one of six themed *universes*. The universe a piece belongs to determines how the entire interface looks while you read or write it — palette, material, texture, typography and motion, not a colour swap.
 
@@ -35,7 +38,7 @@ Two independent applications live here. They share no code, config, or database.
 
 | Path | What it is | Status |
 |---|---|---|
-| **`platform/`** | **Aetheris** — Laravel 12 + Inertia + React | **Active development** |
+| **`platform/`** | **Inkfathom** — Laravel 12 + Inertia + React | **Active development** |
 | `app/`, `resources/`, `routes/` (repo root) | The original Laravel 5.6 blog | Legacy — frozen, kept for reference |
 
 **Work in `platform/` unless you are specifically asked to touch the legacy app.**
@@ -48,6 +51,7 @@ Orientation documents:
 | [platform/CLAUDE.md](platform/CLAUDE.md) | Engineering guide for the active app. |
 | [CLAUDE.md](CLAUDE.md) | Engineering guide for the legacy app, including its known latent bugs. |
 | [FRONTEND_UPGRADE.md](FRONTEND_UPGRADE.md) | The original design contract for the rewrite. |
+| [ROADMAP.md](ROADMAP.md) | What is built, what is left, and what was checked and found impossible. |
 
 ---
 
@@ -96,6 +100,7 @@ Open **http://localhost:8000**.
 | UI | **React 19 + TypeScript** | Strict typecheck in CI-ready form |
 | Styling | **Tailwind CSS 4** | Plus a hand-built metallic token layer |
 | Editor | **TipTap** | Replaced the legacy CKEditor integration |
+| Reading type | **Literata / Source Serif / Newsreader / Lora / Inter / Atkinson Hyperlegible** | Reader-selectable; Atkinson is the low-vision option |
 | Database | **SQLite** (dev) | WAL mode; Postgres recommended for production |
 | Motion | **Hand-written CSS + rAF hooks** | No animation library — see [Motion](#motion) |
 | Payments | **Not wired** | `/upgrade` is a demo stub — see [Known gaps](#known-gaps) |

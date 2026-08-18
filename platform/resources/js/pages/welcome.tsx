@@ -58,7 +58,7 @@ export default function Welcome({ featured, universes, stats }: Props) {
                 </h1>
 
                 <p className="mx-auto mt-7 max-w-2xl text-lg leading-relaxed" style={{ color: 'var(--u-text-muted)' }}>
-                    Aetheris gives each of them somewhere to live. Choose a universe, take on a persona, and the whole platform — palette, texture,
+                    Inkfathom gives each of them somewhere to live. Choose a universe, take on a persona, and the whole platform — palette, texture,
                     typography, light — becomes that world.
                 </p>
 

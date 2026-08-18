@@ -27,12 +27,23 @@ export interface NavItem {
     isActive?: boolean;
 }
 
+export interface ReadingPreferences {
+    font: string;
+    size: number;
+    leading: number;
+    measure: number;
+    /** Resolved server-side from an allowlist. */
+    stack: string;
+}
+
 export interface SharedData {
     name: string;
     auth: Auth;
     /** Default theme for the request; pages may override with their own `universe` prop. */
     activeUniverse: Universe | null;
     universeIndex: UniversePreview[];
+    reading: ReadingPreferences;
+    socialProviders: string[];
     flash: { success: string | null; error: string | null };
     [key: string]: unknown;
 }

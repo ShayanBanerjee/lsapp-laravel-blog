@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Aetheris** — a writing platform where each writer holds several personas, each living in one of six themed universes. The universe a piece belongs to determines how the entire interface looks while reading or writing it.
+**Inkfathom** — a writing platform where each writer holds several personas, each living in one of six themed universes. The universe a piece belongs to determines how the entire interface looks while reading or writing it.
 
 **Read [../STRATEGY.md](../STRATEGY.md) before adding features.** It sets out why this platform exists (what text can do that video structurally cannot) and derives the feature set from that. Every feature here should be traceable to a claim in it; anything that is not is decoration.
 

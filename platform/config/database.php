@@ -108,6 +108,13 @@ return [
             ]) : [],
         ],
 
+        /*
+         * Production target.
+         *
+         * SQLite is fine for development and a small deployment, but it takes a
+         * single writer lock for the whole database. Under real concurrency
+         * that is a queue, not a database — which is why production runs here.
+         */
         'pgsql' => [
             'driver' => 'pgsql',
             'url' => env('DB_URL'),

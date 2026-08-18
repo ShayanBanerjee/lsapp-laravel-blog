@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\Universe;
+use App\Support\ReadingPreferences;
 use App\Support\UniverseContext;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -68,6 +69,20 @@ class HandleInertiaRequests extends Middleware
                 ...$universe->preview(),
                 'locked' => $universe->is_premium && ! ($user?->canAccessUniverse($universe) ?? false),
             ]),
+            // Typography follows the reader across devices. Guests get the
+            // defaults rather than nothing, so the reading view is never unstyled.
+            'reading' => (function () use ($user) {
+                $prefs = ReadingPreferences::normalize($user?->reading_prefs);
+
+                return [...$prefs, 'stack' => ReadingPreferences::stack($prefs['font'])];
+            })(),
+
+            // Which social buttons to render. Driven by config so an
+            // unconfigured provider never shows a button that 503s.
+            'socialProviders' => collect(['google', 'facebook', 'github'])
+                ->filter(fn (string $p) => filled(config("services.{$p}.client_id")))
+                ->values(),
+
             'flash' => [
                 'success' => $request->session()->get('success'),
                 'error' => $request->session()->get('error'),

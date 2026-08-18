@@ -62,6 +62,16 @@ class Post extends Model
         return $this->belongsToMany(Circle::class, 'circle_post')->withTimestamps();
     }
 
+    public function categories(): BelongsToMany
+    {
+        return $this->belongsToMany(Category::class)->withTimestamps();
+    }
+
+    public function bookmarks(): HasMany
+    {
+        return $this->hasMany(Bookmark::class);
+    }
+
     /**
      * Marked passages, grouped so identical passages collapse into one row with
      * a count. This is the "which sentence worked" answer the writer's desk is

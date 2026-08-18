@@ -8,6 +8,7 @@ use App\Models\Response as ModelsResponse;
 use App\Support\Ads;
 use App\Support\HtmlSanitizer;
 use App\Support\PostPresenter;
+use App\Support\Seo;
 use App\Support\UniverseContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -24,7 +25,7 @@ class PostController extends Controller
 
     public function index(Request $request): Response
     {
-        $query = Post::published()->with(['persona.universe', 'universe'])->withCount('highlights');
+        $query = Post::published()->with(['persona.universe', 'universe', 'categories'])->withCount('highlights');
 
         if ($slug = $request->query('universe')) {
             $query->whereHas('universe', fn ($q) => $q->where('slug', $slug));
@@ -51,7 +52,7 @@ class PostController extends Controller
         $this->authorize('view', $post);
 
         $user = $request->user();
-        $post->load(['persona.universe', 'universe', 'user'])->loadCount('highlights');
+        $post->load(['persona.universe', 'universe', 'user', 'categories'])->loadCount('highlights');
 
         $related = Post::published()
             ->where('universe_id', $post->universe_id)
@@ -62,6 +63,8 @@ class PostController extends Controller
             ->limit(3)
             ->get()
             ->map(fn (Post $related) => PostPresenter::card($related));
+
+        $seo = Seo::forPost($post);
 
         $responses = $post->responses()
             ->with(['persona:id,handle,display_name', 'user:id,name', 'highlight:id,quote'])
@@ -115,8 +118,21 @@ class PostController extends Controller
                 : [],
 
             'responses' => $responses,
+
+            // The reader's own shelf state for this piece.
+            'bookmarks' => $user
+                ? [
+                    'saved' => $post->bookmarks()->where('user_id', $user->id)->where('kind', 'saved')->exists(),
+                    'starred' => $post->bookmarks()->where('user_id', $user->id)->where('kind', 'starred')->exists(),
+                ]
+                : ['saved' => false, 'starred' => false],
+
             'ads' => Ads::forRequest($request, 'post'),
-        ]);
+            'seo' => $seo,
+        ])
+            // Also handed to the root Blade view so the tags are in the initial
+            // HTML — social scrapers do not execute JavaScript.
+            ->withViewData(['seo' => $seo]);
     }
 
     public function create(Request $request): Response

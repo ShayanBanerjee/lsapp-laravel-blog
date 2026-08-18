@@ -486,12 +486,60 @@
         outline-offset: 2px;
     }
 
+    /* Range inputs, themed. The browser default is grey on grey and
+       disappears entirely in the light universes. */
+    .u-range {
+        appearance: none;
+        height: 4px;
+        border-radius: 999px;
+        background: linear-gradient(
+            to right,
+            var(--u-accent) 0%,
+            var(--u-accent) var(--fill, 50%),
+            var(--u-border) var(--fill, 50%),
+            var(--u-border) 100%
+        );
+        background-color: var(--u-border);
+        cursor: pointer;
+    }
+
+    .u-range::-webkit-slider-thumb {
+        appearance: none;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: var(--u-accent);
+        border: 3px solid var(--u-bg);
+        box-shadow: 0 1px 6px color-mix(in srgb, var(--u-metal-shadow) 60%, transparent);
+        cursor: grab;
+    }
+
+    .u-range::-moz-range-thumb {
+        width: 18px;
+        height: 18px;
+        border: 3px solid var(--u-bg);
+        border-radius: 50%;
+        background: var(--u-accent);
+        cursor: grab;
+    }
+
     /* --- 8. Reading view -----------------------------------------------------
    Texture belongs on chrome and navigation, never behind body text. */
+    /* Reading view typography is reader-controlled. These four custom
+       properties are written by <UniverseRoot> from the user's saved
+       preferences; the values below are only fallbacks for guests. */
     .prose-u {
         color: var(--u-text);
-        font-size: 1.1875rem;
-        line-height: 1.75;
+        font-family: var(--u-read-font, 'Literata', Georgia, serif);
+        font-size: var(--u-read-size, 19px);
+        line-height: var(--u-read-leading, 1.75);
+        /* Measure in characters, not pixels: line length should track the
+           chosen size, which a fixed max-width cannot do. */
+        max-width: var(--u-read-measure, 68ch);
+        margin-inline: auto;
+        /* Old-style figures and proper kerning make long prose settle down. */
+        font-variant-numeric: oldstyle-nums proportional-nums;
+        text-rendering: optimizeLegibility;
     }
 
     .prose-u > * + * {

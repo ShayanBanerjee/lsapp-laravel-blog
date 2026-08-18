@@ -35,6 +35,9 @@ class PostPresenter
                 'avatar_path' => $post->persona->avatar_path,
             ] : null,
             'universe' => $post->relationLoaded('universe') ? $post->universe?->preview() : null,
+            'categories' => $post->relationLoaded('categories')
+                ? $post->categories->map(fn ($category) => $category->preview())->all()
+                : null,
         ];
     }
 }

@@ -1,20 +1,30 @@
 <?php
 
+use App\Http\Controllers\BillingController;
+use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\CircleController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeepFieldController;
+use App\Http\Controllers\FeedController;
 use App\Http\Controllers\FollowController;
 use App\Http\Controllers\HighlightController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\LetterController;
+use App\Http\Controllers\LibraryController;
 use App\Http\Controllers\PersonaController;
 use App\Http\Controllers\PostController;
 use App\Http\Controllers\ResponseController;
 use App\Http\Controllers\UniverseController;
 use App\Http\Controllers\UpgradeController;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', HomeController::class)->name('home');
+
+// Machine-readable surfaces. Reading is public precisely so these pay off.
+Route::get('sitemap.xml', [FeedController::class, 'sitemap'])->name('sitemap');
+Route::get('robots.txt', [FeedController::class, 'robots'])->name('robots');
+Route::get('feed.xml', [FeedController::class, 'rss'])->name('rss');
 
 /*
  * Public reading. Anyone can browse universes and read what is published in
@@ -32,11 +42,19 @@ Route::resource('posts', PostController::class)
 
 Route::get('upgrade', [UpgradeController::class, 'show'])->name('upgrade.show');
 
+Route::get('categories', [CategoryController::class, 'index'])->name('categories.index');
+Route::get('categories/{category}', [CategoryController::class, 'show'])->name('categories.show');
+
 Route::get('circles', [CircleController::class, 'index'])->name('circles.index');
 Route::get('circles/{circle}', [CircleController::class, 'show'])->name('circles.show');
 
 // The Deep Field — one continuous descent through all six universes.
 Route::get('deep-field', DeepFieldController::class)->name('deep-field');
+
+// Server-to-server; CSRF-exempt, so signature verification is the whole defence.
+Route::post('billing/webhook', [BillingController::class, 'webhook'])
+    ->withoutMiddleware([ValidateCsrfToken::class])
+    ->name('billing.webhook');
 
 Route::middleware(['auth'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
@@ -56,11 +74,15 @@ Route::middleware(['auth'])->group(function () {
     Route::post('universes/{universe}/follow', [FollowController::class, 'toggleUniverse'])->name('universes.follow');
     Route::post('personas/{persona}/follow', [FollowController::class, 'togglePersona'])->name('personas.follow');
 
+    Route::post('billing/checkout', [BillingController::class, 'checkout'])->name('billing.checkout');
     Route::post('upgrade', [UpgradeController::class, 'activate'])->name('upgrade.activate');
     Route::delete('upgrade', [UpgradeController::class, 'deactivate'])->name('upgrade.deactivate');
 
     Route::post('circles/{circle}/membership', [CircleController::class, 'toggle'])->name('circles.toggle');
     Route::get('letters', [LetterController::class, 'index'])->name('letters.index');
+
+    Route::get('library', [LibraryController::class, 'index'])->name('library.index');
+    Route::post('posts/{post}/bookmark', [LibraryController::class, 'toggle'])->name('library.toggle');
 
     /*
      * User-generated content endpoints are rate limited.

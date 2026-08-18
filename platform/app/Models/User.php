@@ -3,6 +3,7 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Support\ReadingPreferences;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -28,6 +29,7 @@ class User extends Authenticatable
         'email',
         'password',
         'is_premium',
+        'reading_prefs',
     ];
 
     /**
@@ -51,6 +53,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_premium' => 'boolean',
+            'reading_prefs' => 'array',
         ];
     }
 
@@ -94,9 +97,25 @@ class User extends Authenticatable
         return $this->hasMany(Letter::class, 'to_user_id');
     }
 
+    public function socialIdentities(): HasMany
+    {
+        return $this->hasMany(SocialIdentity::class);
+    }
+
+    public function bookmarks(): HasMany
+    {
+        return $this->hasMany(Bookmark::class);
+    }
+
     public function lettersSent(): HasMany
     {
         return $this->hasMany(Letter::class, 'from_user_id');
+    }
+
+    /** Typography settings, always complete and always safe to render. */
+    public function readingPreferences(): array
+    {
+        return ReadingPreferences::normalize($this->reading_prefs);
     }
 
     /** Free accounts see ads; paying removes them outright. */

@@ -50,8 +50,8 @@ export default function Upgrade({ isPremium, universes, freePersonaLimit, isStub
                     <div>
                         <p className="text-sm font-semibold">Demo mode — no payments are processed</p>
                         <p className="mt-1 text-sm" style={{ color: 'var(--u-text-muted)' }}>
-                            No Stripe key is configured, so the button below just flips your account flag. Wiring real billing means adding Laravel
-                            Cashier and a webhook that writes entitlement rows.
+                            Billing is not connected yet, so the button below simply switches your plan. Nothing is charged and no card details are
+                            collected.
                         </p>
                     </div>
                 </Panel>

@@ -3,6 +3,7 @@ import { LoaderCircle } from 'lucide-react';
 import { FormEventHandler } from 'react';
 
 import InputError from '@/components/input-error';
+import { SocialButtons } from '@/components/social-buttons';
 import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -37,7 +38,7 @@ export default function Login({ status, canResetPassword }: LoginProps) {
     };
 
     return (
-        <AuthLayout title="Log in to your account" description="Enter your email and password below to log in">
+        <AuthLayout title="Welcome back" description="Pick up where you left off — your marks, your library, and every persona.">
             <Head title="Log in" />
 
             <form className="flex flex-col gap-6" onSubmit={submit}>
@@ -98,6 +99,8 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                     </TextLink>
                 </div>
             </form>
+
+            <SocialButtons action="Log in" />
 
             {status && <div className="mb-4 text-center text-sm font-medium text-green-600">{status}</div>}
         </AuthLayout>

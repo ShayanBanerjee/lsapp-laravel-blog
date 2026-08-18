@@ -1,6 +1,6 @@
 # Why anyone would choose reading over watching
 
-A product thesis for Aetheris, and the feature set derived from it.
+A product thesis for Inkfathom, and the feature set derived from it.
 
 This document exists because "build a blog platform" is not a strategy. Video won the attention war on volume. Any text platform that competes on video's terms — feed velocity, autoplay, engagement loops — loses, because it is playing a game whose rules were written for a different medium.
 

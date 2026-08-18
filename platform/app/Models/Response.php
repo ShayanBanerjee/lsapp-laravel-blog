@@ -9,8 +9,13 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Response extends Model
 {
     protected $fillable = [
-        'post_id', 'user_id', 'persona_id', 'highlight_id', 'parent_id', 'body',
+        'post_id', 'user_id', 'persona_id', 'highlight_id', 'parent_id', 'body', 'flagged_category', 'flagged_at',
     ];
+
+    protected function casts(): array
+    {
+        return ['flagged_at' => 'datetime'];
+    }
 
     public function post(): BelongsTo
     {

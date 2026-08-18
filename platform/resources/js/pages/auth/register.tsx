@@ -3,6 +3,7 @@ import { LoaderCircle } from 'lucide-react';
 import { FormEventHandler } from 'react';
 
 import InputError from '@/components/input-error';
+import { SocialButtons } from '@/components/social-buttons';
 import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,7 +34,7 @@ export default function Register() {
     };
 
     return (
-        <AuthLayout title="Create an account" description="Enter your details below to create your account">
+        <AuthLayout title="Start writing" description="One account, as many selves as you need. Two universes are free forever.">
             <Head title="Register" />
             <form className="flex flex-col gap-6" onSubmit={submit}>
                 <div className="grid gap-6">
@@ -115,6 +116,8 @@ export default function Register() {
                     </TextLink>
                 </div>
             </form>
+
+            <SocialButtons action="Sign up" />
         </AuthLayout>
     );
 }

@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Path | What it is | Status |
 |---|---|---|
 | repo root (`app/`, `resources/views/`, …) | The original Laravel 5.6 blog | Legacy — frozen, kept for reference |
-| **`platform/`** | **Aetheris** — the Laravel 12 + Inertia + React rewrite | **Active development** |
+| **`platform/`** | **Inkfathom** — the Laravel 12 + Inertia + React rewrite | **Active development** |
 
 **Work in `platform/` unless you are specifically asked to touch the legacy app.** The two do not share code, config, or a database. The rest of this file documents the legacy app; `platform/` has its own [CLAUDE.md](platform/CLAUDE.md).
 

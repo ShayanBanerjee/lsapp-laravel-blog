@@ -69,4 +69,6 @@ export interface PostCard {
     updated_human?: string | null;
     persona: { handle: string; display_name: string; avatar_path?: string | null } | null;
     universe: UniversePreview | null;
+    marks?: number | null;
+    categories?: { slug: string; name: string; description: string | null; icon: string | null }[] | null;
 }

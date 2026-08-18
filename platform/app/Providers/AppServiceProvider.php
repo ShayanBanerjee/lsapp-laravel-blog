@@ -2,6 +2,11 @@
 
 namespace App\Providers;
 
+use App\Support\Billing\BillingGateway;
+use App\Support\Billing\NullGateway;
+use App\Support\Billing\StripeGateway;
+use App\Support\Moderation\LexiconModerator;
+use App\Support\Moderation\Moderator;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
@@ -12,7 +17,23 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        //
+        // Moderation is resolved through the interface so a hosted classifier
+        // can replace the local lexicon without touching a single call site.
+        $this->app->bind(BillingGateway::class, function () {
+            $gateway = match (config('services.billing.driver', 'stripe')) {
+                'stripe' => new StripeGateway,
+                default => new NullGateway,
+            };
+
+            // Never hand back a half-configured gateway.
+            return $gateway->isConfigured() ? $gateway : new NullGateway;
+        });
+
+        $this->app->bind(Moderator::class, function () {
+            return match (config('services.moderation.driver', 'lexicon')) {
+                default => new LexiconModerator,
+            };
+        });
     }
 
     public function boot(): void
