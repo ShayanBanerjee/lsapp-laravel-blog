@@ -32,9 +32,7 @@ export default function CircleShow({ circle, posts, joined, members }: Props) {
 
     return (
         <SiteLayout wide>
-            <Head title={circle.name}>
-                <meta name="description" content={circle.description} />
-            </Head>
+            <Head title={circle.name} />
 
             <header className="mb-12 max-w-3xl">
                 <div className="mb-5 flex flex-wrap items-center gap-3">

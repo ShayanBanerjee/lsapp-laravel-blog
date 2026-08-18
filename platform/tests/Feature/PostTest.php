@@ -220,4 +220,35 @@ class PostTest extends TestCase
 
         $this->assertDatabaseMissing('posts', ['title' => 'Impersonation']);
     }
+
+    /**
+     * Storytelling blocks have to survive the sanitiser on the way in, or the
+     * editor silently produces markup the reader never sees. The security
+     * behaviour of each attribute is covered in HtmlSanitizerTest; this is the
+     * round trip through an actual publish.
+     */
+    public function test_storytelling_blocks_survive_publishing(): void
+    {
+        [$user, $persona] = $this->writer();
+
+        $body = '<p>Opening.</p>'
+            .'<figure data-story="callout" data-story-value="4.2" data-story-label="light years">'
+            .'<p>Context for the number.</p></figure>'
+            .'<figure data-story="pinned"><img src="/images/covers/cosmos-1.jpg" alt="Stars">'
+            .'<p>Text that moves past it.</p></figure>';
+
+        $this->actingAs($user)->post('/posts', [
+            'persona_id' => $persona->id,
+            'title' => 'A Piece With Blocks',
+            'body' => $body,
+            'status' => 'published',
+        ])->assertRedirect();
+
+        $stored = Post::where('title', 'A Piece With Blocks')->firstOrFail()->body;
+
+        $this->assertStringContainsString('data-story="callout"', $stored);
+        $this->assertStringContainsString('data-story-value="4.2"', $stored);
+        $this->assertStringContainsString('data-story="pinned"', $stored);
+        $this->assertStringContainsString('src="/images/covers/cosmos-1.jpg"', $stored);
+    }
 }

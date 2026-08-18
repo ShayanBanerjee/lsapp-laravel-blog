@@ -16,6 +16,13 @@ composer run dev
 
 That one command runs the server, queue listener, log tailer and Vite together — it is the normal way to work. Individually: `php artisan serve`, `npm run dev`.
 
+To work with server-side rendering on (builds the SSR bundle, then runs the Node
+renderer alongside the server):
+
+```bash
+composer run dev:ssr
+```
+
 ```bash
 php artisan test
 ```
@@ -89,6 +96,95 @@ The product thesis in one line: **the passage is the atom, and writers quit beca
 - **Universes are cached** (`Universe::cachedAll()`), invalidated by model events. They are read on every request and written approximately never.
 - **SQLite is configured for concurrency**: WAL journal mode plus a 5s busy timeout. The Laravel defaults (no WAL, zero timeout) make any two simultaneous writes fail with "database is locked". Verified with 8 parallel processes × 25 writes: zero failures. *This makes SQLite viable for dev and small deployments — it is still not the right production database. Use Postgres at real concurrency.*
 
+### Server-side rendering
+
+`resources/js/ssr.jsx` → `bootstrap/ssr/ssr.js`, run by `php artisan inertia:start-ssr`. Build it with `npm run build:ssr`; `composer run dev:ssr` does both and runs it alongside the server.
+
+**The failure mode is silence.** When the SSR process throws, Inertia catches it and falls back to client rendering: the page still returns 200 and looks perfect in a browser, while every scraper sees an empty shell. Never conclude SSR works because the site looks right — read the SSR process output, or check that `<div id="app">` has rendered children. `SsrTest` guards the parts that can be asserted from PHP.
+
+Three things break it, all of which have already bitten:
+
+- **Browser globals at module scope.** The SSR bundle imports every page eagerly, so a `window.matchMedia(...)` in a module body crashes the process at import time, before any render. Guard with `typeof window === 'undefined'` and resolve lazily — see `hooks/use-appearance.tsx` and `hooks/use-motion.ts`.
+- **`route()` is not global in Node.** The browser gets it from the `@routes` directive; the SSR process does not. `ssr.jsx` sets `globalThis.Ziggy` and `globalThis.route` from the `ziggy` shared prop, which `HandleInertiaRequests` sends **on full page loads only** — Inertia navigations render in the browser where the global already exists, so re-sending several KB of route table would buy nothing. `vite.config.js` aliases `ziggy-js` to the composer package, which is where that client actually ships.
+- **Duplicate head tags.** `@inertiaHead` is deliberately absent from `app.blade.php`. With SSR on it emits a second `<title>` and `<meta name="description">` from each page's `<Head>`, competing with the server-rendered ones. The Blade tags win because they are the only ones that survive the SSR process being down.
+
+### Tutorials
+
+`courses` → `course_modules` → lessons, where **a lesson is a row in `posts`** (`kind = 'lesson'`, plus `course_module_id` and `sort_order`).
+
+That is the load-bearing decision. Lessons are not a parallel content type, so highlights, responses, letters, bookmarks, reading typography and the sanitiser all apply to them with no polymorphic second case anywhere. A lesson that could not be marked would be a worse lesson.
+
+`Post::scopePublished()` excludes lessons, which is why no existing listing needed touching — feed, sitemap, RSS, universe, subject, circle and home all go through that one scope, so a lesson cannot appear stranded out of its course. Course pages ask for lessons explicitly via `scopePublishedLessons()`. `/posts/{slug}` 301s a lesson into its course.
+
+`CourseController::outline()` builds the contents panel in three queries regardless of course size; `QueryBudgetTest` asserts it does not grow.
+
+### Storytelling blocks
+
+Four TipTap nodes — pinned image, step sequence, before/after, data callout — stored as `<figure data-story="…">` with plain block content inside.
+
+**Nothing about the behaviour lives in the markup.** The static CSS stands alone, so a block is completely readable server-rendered, in an RSS reader, and under reduced motion; `hooks/use-story-blocks.ts` layers the scroll behaviour on afterwards as an enhancement. That is also why it is progressive enhancement rather than React islands: `Readable` replaces `innerHTML` wholesale on every mark, so anything React mounted inside would be destroyed the moment a reader marks a passage. The hook re-attaches after every repaint.
+
+Steps start at `opacity: 0`, so they carry a 3s failsafe that settles them regardless — same belt-and-braces as `.u-reveal` being forced visible in CSS. A tab never brought to the foreground does not fire IntersectionObserver, and stranded invisible prose is far worse than an un-animated reveal.
+
+`HtmlSanitizer` now keeps a **strict per-tag attribute allowlist** (`ALLOWED_ATTRIBUTES`) with a validator per attribute value — `data-story` must be one of four literals, `src` must be https or root-relative (no `data:`, which is an SVG-script vector). Tags are rebuilt from scratch rather than filtered, so a duplicated or malformed attribute cannot survive in the part of the string we did not rewrite. Never add `style` or anything matching `on*`.
+
+### Integrations and export
+
+- **Markdown + YAML frontmatter** is the whole Obsidian integration, and that is not a compromise: a vault is a folder of files on someone's disk, so a file in their format *is* the integration. Works for everyone with no account anywhere.
+- **Readwise** maps exactly — their unit is a highlight with a source, and so is ours. Needs the reader's own token.
+- **LaTeX/DOCX** are the honest version of "submit to IEEE". `ManuscriptExporter::inlineToTex()` tokenises formatting *before* escaping; escaping first and un-escaping after does not work, because `escapeTex` also escapes the braces of the commands you just inserted.
+- **Zenodo** creates a **draft** and stops. Publishing mints a permanent DOI and is irreversible, so the last step stays a human decision on their page.
+- **Crossref** needs no credentials at all.
+
+Tokens live in `integrations.token`, `encrypted` cast and `$hidden`, so a leaked backup does not hand over live write access to someone's third-party account, and the credential cannot be serialized into an Inertia page by accident. `IntegrationTest` asserts both.
+
+### Copy detection
+
+Shingle **containment** — overlapping four-word runs, measured as "how much of the smaller piece appears in the larger". Run on publish only; drafts cannot have been copied *from*.
+
+SimHash was built first and rejected on measurement (numbers in the `post_fingerprints` migration). Containment rather than Jaccard because Jaccard punishes a copy for being pasted into a longer piece — a lifted paragraph scores 0.26 by Jaccard and 0.55 by containment, and the second number describes what happened.
+
+The `post_shingles.shingle_hash` index is what makes this a lookup rather than a scan; without it, publishing gets slower with every piece ever written.
+
+**Scope, and say it plainly to users:** this detects copying *within the platform*. It cannot detect copying from the open web — that needs an index of the open web. Nothing is ever blocked or removed automatically; a flag is a prompt for a human, because near-identical pairs have legitimate explanations.
+
+### Writer social layer
+
+Built against STRATEGY.md's explicit exclusions, which matter more here than anywhere else:
+
+- **No public follower counts.** A profile shows published pieces and which sentences landed. `WriterSocialTest` asserts the *absence*, because absences regress silently.
+- **No infinite feed.** `/following` is chronological, unranked and paginated. Ranking would be a claim about what you should read next, and the reader sets the pace.
+- **Notifications carry the passage, never a tally.** `quote` is denormalised on `writer_notifications` so the writer keeps the specific praise even after the highlight is deleted. There is no "someone followed you" — that is standing, not feedback.
+
+### Theme editor and vanity handles
+
+Both were advertised on `/upgrade` and are now real.
+
+A custom theme is a set of token **overrides** over a base universe — the same shape a seeded universe has, which is why no component changed. Applied inside `UniverseContext::withCustomTheme()`, on the **entitled branch only**, beside the premium token sets: gating it in React would put the mechanism in the JS bundle. A lapsed subscription stops applying it, which is tested.
+
+Override values are validated to a strict hex pattern and re-filtered on read. They are interpolated into a `style` attribute as CSS custom properties, so an unvalidated value is a CSS injection — matching a pattern removes the class of problem rather than trying to escape it.
+
+Short handles (2–4 characters) are the paid tier; `App\Rules\VanityHandle::RESERVED` blocks impersonation and route collisions for **everyone**, premium or not. A test asserts every top-level route path is in that list, so it stays honest as routes are added.
+
+### Email verification
+
+`User` implements `MustVerifyEmail`, which is what makes the whole scaffolding
+live — without the contract, `Registered` sends nothing and the `verified`
+middleware passes everyone.
+
+The gate is **writing, not membership**. `verified` guards the editor, publish,
+update, responses and letters. It deliberately does *not* guard reading,
+marking, saving, following, or `posts.destroy` — marks are the core loop and
+gating them would cost real readers to inconvenience spammers who never read,
+and taking your own work down must never require clearing a hurdle first.
+
+`users:prune-unverified` (nightly, `auth.unverified_grace_days`, default 30)
+deletes abandoned signups. Eligibility lives in `User::scopeAbandonedUnverified`
+and excludes any account holding content of any kind, **and any account with a
+social identity** — Facebook does not assert a verified address, so a real
+person can sit at `email_verified_at = null` forever and must not be swept up.
+Use `--dry-run` before trusting a window change.
+
 ### Security
 
 - `HtmlSanitizer::clean()` — tag allowlist for post bodies (rich text, rendered with `dangerouslySetInnerHTML`).
@@ -137,7 +233,6 @@ Authorization is Policies (`PostPolicy`, `UniversePolicy`, `PersonaPolicy`), not
 
 ## Known gaps
 
-- **SSR is not enabled.** Post content currently reaches the browser only inside the `data-page` JSON, not as server-rendered HTML. For a blog this is the most consequential thing still outstanding — it needs a `resources/js/ssr.tsx` entry, `npm run build:ssr`, and a running `php artisan inertia:start-ssr` process.
 - **Billing is a stub.** `UpgradeController::activate()` flips `users.is_premium` with no payment taken, and is disabled the moment `services.stripe.secret` is set. Real billing means Laravel Cashier plus a webhook writing `theme_entitlements` rows — the access-control code should not need to change.
 - The custom theme editor and vanity handles are advertised on `/upgrade` but not built.
 - Follows are recorded but there is no feed built from them yet.

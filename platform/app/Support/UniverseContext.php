@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Models\CustomTheme;
 use App\Models\Persona;
 use App\Models\Universe;
 use App\Models\User;
@@ -69,7 +70,7 @@ class UniverseContext
         }
 
         if ($user && $user->canAccessUniverse($universe)) {
-            return $universe->tokens() + ['locked' => false];
+            return self::withCustomTheme($universe->tokens(), $user) + ['locked' => false];
         }
 
         if (! $universe->is_premium) {
@@ -82,5 +83,39 @@ class UniverseContext
             'locked' => true,
             'theme' => $fallback?->theme ?? $universe->theme,
         ];
+    }
+
+    /**
+     * Layer a user's own palette over the universe's tokens.
+     *
+     * On the *entitled* branch only, and deliberately so: this sits inside the
+     * same server-side gate as the premium token sets, because the theme editor
+     * is a paid feature and gating it in React would put the whole mechanism in
+     * the JS bundle for anyone to read. A user with no active theme, or one who
+     * has lapsed, simply gets the universe tokens back unchanged.
+     *
+     * @param  array<string, mixed>  $tokens
+     * @return array<string, mixed>
+     */
+    private static function withCustomTheme(array $tokens, User $user): array
+    {
+        if (! $user->is_premium) {
+            return $tokens;
+        }
+
+        $theme = CustomTheme::where('user_id', $user->id)->where('is_active', true)->first();
+
+        if (! $theme) {
+            return $tokens;
+        }
+
+        // Overrides were validated to hex on write; re-filter on read so a row
+        // written before that rule existed cannot reach a style attribute.
+        $tokens['theme'] = array_merge(
+            $tokens['theme'] ?? [],
+            CustomTheme::sanitizeOverrides($theme->overrides ?? []),
+        );
+
+        return $tokens;
     }
 }

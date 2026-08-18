@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Circle;
 use App\Models\Post;
 use App\Support\PostPresenter;
+use App\Support\Seo;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -30,7 +31,11 @@ class CircleController extends Controller
                 ...$this->card($circle),
                 'joined' => in_array($circle->id, $joined, true),
             ]),
-        ]);
+        ])->withViewData(['seo' => Seo::forPage(
+            'Circles',
+            'Community organised by subject rather than follower count — each circle with its own reading list and prompts.',
+            route('circles.index'),
+        )]);
     }
 
     public function show(Request $request, Circle $circle): Response
@@ -53,7 +58,11 @@ class CircleController extends Controller
                 : false,
             'members' => $circle->members()->limit(12)->get()
                 ->map(fn ($member) => ['name' => $member->name]),
-        ]);
+        ])->withViewData(['seo' => Seo::forPage(
+            $circle->name,
+            $circle->description ?? '',
+            route('circles.show', $circle),
+        )]);
     }
 
     public function toggle(Request $request, Circle $circle): RedirectResponse

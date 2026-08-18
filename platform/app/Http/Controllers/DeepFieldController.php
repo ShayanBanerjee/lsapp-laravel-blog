@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Universe;
+use App\Support\Seo;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -42,7 +43,11 @@ class DeepFieldController extends Controller
 
         return Inertia::render('deep-field', [
             'layers' => $layers,
-        ]);
+        ])->withViewData(['seo' => Seo::forPage(
+            'The Deep Field',
+            'One continuous descent from the space between stars to the bottom of the sea, through all six universes.',
+            route('deep-field'),
+        )]);
     }
 
     /**

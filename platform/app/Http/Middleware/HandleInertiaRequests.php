@@ -3,10 +3,12 @@
 namespace App\Http\Middleware;
 
 use App\Models\Universe;
+use App\Support\Notifier;
 use App\Support\ReadingPreferences;
 use App\Support\UniverseContext;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
+use Tighten\Ziggy\Ziggy;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -83,10 +85,32 @@ class HandleInertiaRequests extends Middleware
                 ->filter(fn (string $p) => filled(config("services.{$p}.client_id")))
                 ->values(),
 
+            // Badge count only. The notifications themselves carry passages
+            // and are loaded on their own page, not on every request.
+            'unreadNotifications' => fn () => Notifier::unreadFor($user),
+
             'flash' => [
                 'success' => $request->session()->get('success'),
                 'error' => $request->session()->get('error'),
             ],
+
+            /*
+             * Ziggy's route table, for the SSR process only.
+             *
+             * The browser already has `route()` as a global from the @routes
+             * directive, so this exists purely so the Node renderer can resolve
+             * route names — without it every page that calls route() throws
+             * server-side, and Inertia *silently* falls back to client
+             * rendering, so the breakage is invisible from the outside.
+             *
+             * Only sent on full page loads, which is exactly when SSR runs.
+             * Inertia navigations are rendered in the browser, where the global
+             * is already set, so shipping ~8 KB of route table with every
+             * navigation would buy nothing.
+             */
+            'ziggy' => $request->inertia()
+                ? null
+                : fn () => [...(new Ziggy)->toArray(), 'location' => $request->url()],
         ];
     }
 }

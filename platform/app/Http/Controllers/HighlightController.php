@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Highlight;
 use App\Models\Post;
 use App\Support\HtmlSanitizer;
+use App\Support\Notifier;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
@@ -32,7 +33,7 @@ class HighlightController extends Controller
         // firstOrCreate rather than create: the unique index already prevents
         // duplicates, and racing double-clicks should be idempotent rather than
         // a 500.
-        Highlight::firstOrCreate(
+        $highlight = Highlight::firstOrCreate(
             [
                 'post_id' => $post->id,
                 'user_id' => $request->user()->id,
@@ -42,6 +43,12 @@ class HighlightController extends Controller
             ],
             ['quote' => $data['quote']],
         );
+
+        // Only on the first mark — re-marking an already-marked passage is not
+        // a second piece of news for the writer.
+        if ($highlight->wasRecentlyCreated) {
+            Notifier::marked($post, $request->user(), $data['quote']);
+        }
 
         return back(fallback: route('posts.show', $post))->with('success', 'Passage marked.');
     }

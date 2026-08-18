@@ -702,6 +702,172 @@
     animation: u-rise 0.6s var(--u-ease) both;
 }
 
+/* ------------------------------------------------------------------ *
+ * Storytelling blocks
+ *
+ * In @layer components, like every custom class here — unlayered CSS
+ * outranks every Tailwind utility and silently breaks things like md:hidden.
+ *
+ * The static styles stand alone: a block is completely readable with no
+ * JavaScript, which is what makes these safe to server-render and safe under
+ * reduced motion. `[data-story-ready]` is set only once the enhancement hook
+ * has attached, so the animated states can never strand content invisible on
+ * a page where the script never ran.
+ * ------------------------------------------------------------------ */
+@layer components {
+    figure[data-story] {
+        margin: 3.5rem 0;
+        padding: 1.75rem;
+        border: 1px solid var(--u-border);
+        border-radius: 14px;
+        background: color-mix(in srgb, var(--u-surface-1) 70%, transparent);
+    }
+
+    figure[data-story] > * + * {
+        margin-top: 1rem;
+    }
+
+    figure[data-story] img {
+        width: 100%;
+        border-radius: 10px;
+        display: block;
+    }
+
+    figure[data-story] figcaption {
+        font-size: 0.8125rem;
+        color: var(--u-text-muted);
+    }
+
+    /* Pinned: the image holds while the prose beside it moves past. Sticky
+       only where there is room for two columns; stacked on small screens,
+       where a sticky image would eat the whole viewport. */
+    @media (min-width: 1024px) {
+        figure[data-story='pinned'] {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 2.5rem;
+            align-items: start;
+        }
+
+        figure[data-story='pinned'] > img:first-child {
+            position: sticky;
+            top: 6rem;
+        }
+
+        /* Grid children need min-width:0 or long words refuse to wrap and
+           push the page out sideways. */
+        figure[data-story='pinned'] > * {
+            min-width: 0;
+        }
+    }
+
+    /* Steps: numbered, and revealed one at a time once enhanced. */
+    figure[data-story='steps'] {
+        counter-reset: story-step;
+    }
+
+    figure[data-story='steps'] > * {
+        counter-increment: story-step;
+        padding-left: 3rem;
+        position: relative;
+    }
+
+    figure[data-story='steps'] > *::before {
+        content: counter(story-step);
+        position: absolute;
+        left: 0;
+        top: -0.15rem;
+        width: 2rem;
+        height: 2rem;
+        display: grid;
+        place-items: center;
+        border-radius: 999px;
+        border: 1px solid var(--u-border);
+        background: var(--u-surface-2);
+        color: var(--u-accent);
+        font-size: 0.8125rem;
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* Only hide steps once we know something is going to reveal them. */
+    figure[data-story='steps'][data-story-ready] > *:not([data-story-settled]) {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+
+    figure[data-story='steps'][data-story-ready] > * {
+        transition:
+            opacity 0.5s var(--u-ease),
+            transform 0.5s var(--u-ease);
+    }
+
+    /* Before / after: two stacked images, wiped by a reader-controlled slider.
+       Static fallback is simply both images, one after the other. */
+    figure[data-story='before-after'][data-story-ready] {
+        position: relative;
+        --story-wipe: 50%;
+    }
+
+    figure[data-story='before-after'][data-story-ready] img {
+        grid-area: 1 / 1;
+    }
+
+    figure[data-story='before-after'][data-story-ready] {
+        display: grid;
+    }
+
+    figure[data-story='before-after'][data-story-ready] img:nth-of-type(2) {
+        clip-path: inset(0 0 0 var(--story-wipe));
+    }
+
+    figure[data-story='before-after'] .story-wipe-handle {
+        grid-area: 1 / 1;
+        align-self: end;
+        width: 100%;
+        margin: 0;
+        z-index: 1;
+        accent-color: var(--u-accent);
+    }
+
+    /* Callout: one number, large, and the sentence that gives it meaning. */
+    figure[data-story='callout'] {
+        text-align: center;
+    }
+
+    figure[data-story='callout']::before {
+        content: attr(data-story-value);
+        display: block;
+        font-family: var(--u-font-display, inherit);
+        font-size: clamp(2.75rem, 9vw, 5rem);
+        line-height: 1;
+        color: var(--u-accent);
+        font-variant-numeric: tabular-nums;
+    }
+
+    figure[data-story='callout'][data-story-label]::after {
+        content: attr(data-story-label);
+        display: block;
+        margin-top: 0.5rem;
+        font-size: 0.6875rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--u-text-muted);
+    }
+
+    figure[data-story='pinned'][data-story-ready]:not([data-story-settled]),
+    figure[data-story='callout'][data-story-ready]:not([data-story-settled]) {
+        opacity: 0;
+        transform: translateY(14px);
+    }
+
+    figure[data-story='pinned'][data-story-ready],
+    figure[data-story='callout'][data-story-ready] {
+        transition:
+            opacity 0.6s var(--u-ease),
+            transform 0.6s var(--u-ease);
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
     .u-drift,
     .u-rise {
@@ -713,6 +879,20 @@
         opacity: 1 !important;
         transform: none !important;
         transition: none !important;
+    }
+
+    /* Storytelling blocks resolve to the finished state — every step present,
+       every block visible. Reduced motion means content without movement, and
+       never content that failed to arrive. */
+    figure[data-story],
+    figure[data-story] > * {
+        opacity: 1 !important;
+        transform: none !important;
+        transition: none !important;
+    }
+
+    figure[data-story='pinned'] > img:first-child {
+        position: static !important;
     }
 
     .specular-pointer::after {

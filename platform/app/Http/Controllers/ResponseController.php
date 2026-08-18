@@ -6,6 +6,7 @@ use App\Models\Post;
 use App\Models\Response;
 use App\Support\HtmlSanitizer;
 use App\Support\Moderation\Moderator;
+use App\Support\Notifier;
 use App\Support\UniverseContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -61,6 +62,8 @@ class ResponseController extends Controller
             'flagged_category' => $verdict->needsReview() ? $verdict->category : null,
             'flagged_at' => $verdict->needsReview() ? now() : null,
         ]);
+
+        Notifier::answered($post, $request->user(), UniverseContext::activePersona($request)?->id, $body);
 
         return back(fallback: route('posts.show', $post))->with('success', 'Response posted.');
     }

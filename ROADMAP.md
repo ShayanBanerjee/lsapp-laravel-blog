@@ -19,97 +19,71 @@ unless noted. Everything in "Remaining" is deliberately not started.
 | The Deep Field | One continuous zoom through all six universes. |
 | Library | Saved + starred, private per reader. |
 | Categories | 10 subjects, orthogonal to universes. |
-| SEO | Server-rendered OG/Twitter/JSON-LD, sitemap, robots, RSS. |
+| SEO | Server-rendered OG/Twitter/JSON-LD on every shareable page, sitemap, robots, RSS. |
 | Sharing | 8 networks + copy link; shares the *selected passage* when there is one. |
 | Reading typography | 6 faces incl. Atkinson Hyperlegible; size, leading, measure — saved per user. |
 | Moderation | Narrow lexicon: slurs + directed sexual harassment only. Free expression protected by design and by test. |
 | Social sign-in | Google / Facebook / GitHub via Socialite, `social_identities` table, verified-email-only auto-linking. |
 | Payments | Provider-agnostic gateway, Stripe driver with real webhook signature verification. Inert without keys. |
-| Postgres | Full suite (94 tests) verified green on PostgreSQL 16. |
+| Postgres | Full suite (176 tests) verified green on PostgreSQL 16. |
+| SSR | On. Article bodies render server-side; `composer run dev:ssr`. Silent-fallback traps documented in platform/CLAUDE.md. |
+| Tutorials | Courses → modules → lessons with a persistent contents panel and per-lesson progress. A lesson **is** a post, so marks, responses and typography work inside one unchanged. |
+| Storytelling blocks | Four TipTap blocks — pinned image, step sequence, before/after, data callout — stored as plain semantic HTML and enhanced progressively. |
+| Tool integrations | Markdown+YAML export (Obsidian and anything else that reads Markdown), Readwise push. Tokens encrypted at rest. |
+| Academic export | IEEEtran LaTeX, DOCX, Zenodo draft deposit, Crossref DOI lookup (no credentials needed). |
+| Copy detection | Shingle containment on publish, flagged for a human, never auto-removed. Detects copying **within** the platform only. |
+| Writer social | Public profiles, chronological following feed (paginated, finite), notifications that carry the passage rather than a count. |
+| Theme editor | Premium palettes layered over any writable universe, gated server-side beside the premium token sets. |
+| Vanity handles | Short handles are the paid tier; reserved words blocked for everyone; `/@handle` URLs. |
 | Security | CSP, HSTS, rate limits, policies, two-tier sanitisation. |
+| Email verification | Enforced: writing gated on a verified address, reading is not. Resend flow, nightly prune of abandoned signups. |
 
 ---
 
 ## Remaining
 
-Ordered by my recommendation. Nothing here is blocked by anything except where noted.
+Everything on the original roadmap is now built. What is left is smaller and
+mostly follows from having shipped the above.
 
-### 1. Tutorials with a dynamic side panel — *e.g. "Master GitHub Copilot (GH-300)"*
-Multi-page, multi-section learning paths with a persistent left-hand contents
-panel, progress tracking, and per-section marking.
+### 1. ORCID
+The one item from "academic export" not built. It is pure OAuth — a client id
+and secret from ORCID, then a token exchange linking a verified researcher
+identity to an account. There is nothing to design; it needs credentials, and
+building it blind would produce code nobody can run.
 
-Needs: `courses` / `modules` / `lessons` schema, a progress table, and a nested
-layout. The reading and highlight layers already work inside it unchanged.
+**Effort: small, once credentials exist.**
 
-**Effort: large.** The single biggest remaining item, and the best fit for the
-"technology themes" idea.
+### 2. Open-web copy detection
+`CopyDetection` reliably catches copying *within the platform*. Catching copying
+*from the open web* needs an index of the open web — Copyleaks, Originality.ai
+and similar sell one, per check. The integration point is a single call in
+`CopyDetection::check()`; the decision is commercial, not technical.
 
-### 2. Storytelling tools
-Scrollytelling blocks the editor can insert — pinned images, step-through
-sequences, before/after, data callouts. The Deep Field proves the mechanics;
-this makes them available to writers rather than hardcoded into one page.
+**Effort: small to integrate, ongoing per-check cost.**
 
-**Effort: large.** Needs custom TipTap nodes plus renderers.
-
-### 3. Tool integrations
-Real APIs, in order of usefulness: **Readwise** (highlights map exactly onto our
-marks), **Notion**, **Zotero**, **Ghost**, **Dev.to**, **Hashnode**,
-**WordPress**, **Buttondown**, **GitHub Gist**, **Instapaper**.
-
-- **Obsidian** has no cloud API — integration means Markdown export with YAML
-  frontmatter plus the `obsidian://` URI scheme.
-- **Medium** API deprecated (2023) and **Pocket** shut down (2025). Both out.
-
-**Effort: medium**, one at a time. Needs API keys per service.
-
-### 4. Academic / publisher export
-**Not** direct submission — see the note at the bottom. What is real:
-
-- **Zenodo** — genuine deposit API, mints real DOIs.
-- **ORCID** — genuine OAuth, links a verified researcher identity.
-- **Crossref** — metadata lookup.
-- Export to IEEE LaTeX template and manuscript DOCX.
+### 3. Editing UI for courses
+Courses, modules and lessons are seeded and fully readable, but there is no
+authoring screen — a course is currently created from a seeder. The reading
+half is the hard half and it is done; this is CRUD over three tables.
 
 **Effort: medium.**
 
-### 5. Plagiarism / copy detection
-Fingerprint published bodies (shingling + SimHash), compare on publish, flag
-near-duplicates for review. Detects copying *within* the platform reliably;
-detecting copying *from the open web* needs a third-party index (Copyleaks,
-Originality.ai) and is a per-check cost.
-
-**Effort: medium-large.**
-
-### 6. Writer social layer
-Profiles, following between writers, a following-feed, notifications.
-Follows are already recorded — nothing composes a feed from them yet.
-
-**Effort: medium.** Worth doing *after* tutorials, since it benefits from having
-more content to follow.
-
-### 7. Email verification enforcement
-The scaffolding exists and social sign-ins set `email_verified_at` when the
-provider asserts it. Not yet enforced: gating publishing behind verification,
-re-send flow, and expiring unverified accounts.
+### 4. Notifications beyond marks and responses
+Letters have their own page and are deliberately excluded from the notification
+stream. Worth revisiting only if writers say they miss them — deliberately not
+adding "someone followed you", which is standing rather than feedback.
 
 **Effort: small.**
 
-### 8. Custom theme editor + vanity handles
-Both are advertised on `/upgrade` and neither is built. Either build them or
-remove the promise — shipping a pricing page that lists absent features is worse
-than a shorter list.
+### 5. Real billing
+Unchanged from before: `UpgradeController::activate()` still flips
+`users.is_premium` with no payment taken, and disables itself the moment
+`services.stripe.secret` is set. Real billing means Cashier plus a webhook
+writing `theme_entitlements` rows. The access-control code should not need to
+change — the theme editor and vanity handles both read `is_premium` through the
+same gate.
 
 **Effort: medium.**
-
-### 9. Server-side rendering
-`vite.config.js` now has an SSR entry and `npm run build:ssr` exists, so this is
-closer than it was. Turning it on means building the SSR bundle and running
-`php artisan inertia:start-ssr`.
-
-Less urgent than it was — the SEO metadata is now server-rendered
-independently — but still the right end state for article content.
-
-**Effort: small-medium.**
 
 ---
 
@@ -122,5 +96,15 @@ API**; submission requires a human in their portal. Springer Nature's public
 APIs are for *reading* metadata, not depositing work. National Geographic
 commissions through editors, with no API.
 
-A button labelled "submit to IEEE" could not work. Item 4 above is the honest
-version of the same goal.
+A button labelled "submit to IEEE" could not work. The LaTeX and DOCX exports
+are the honest version of the same goal: the file their portal asks for, which
+is the step immediately before the portal anyway.
+
+**SimHash for copy detection.**
+Built, measured, and replaced. Over pieces this short it scored a three-word
+edit at Hamming distance 18 against unrelated writing at 26 — too thin a margin
+to threshold safely — and it could not see a single copied paragraph inside a
+longer piece at all. Shingle containment separates the same cases 0.84 against
+0.00, and catches the lifted paragraph at 0.55. The measurements are in the
+`post_fingerprints` migration; do not reintroduce SimHash here without redoing
+them.

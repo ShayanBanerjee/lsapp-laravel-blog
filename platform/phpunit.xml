@@ -19,6 +19,12 @@
     </source>
     <php>
         <env name="APP_ENV" value="testing"/>
+        <!-- Tests must not depend on a Node process being up. With SSR left on,
+             a suite run against a running `inertia:start-ssr` renders through it
+             and one run without it does not, so behaviour changes with the
+             developer's terminal. The SSR bundle is verified by SsrTest and by
+             building it, not by the feature suite. -->
+        <env name="INERTIA_SSR_ENABLED" value="false"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="CACHE_STORE" value="array"/>

@@ -20,6 +20,7 @@ class Post extends Model
     protected $fillable = [
         'user_id', 'persona_id', 'universe_id', 'slug', 'title',
         'excerpt', 'body', 'cover_image', 'status', 'reading_time', 'published_at',
+        'kind', 'course_module_id', 'sort_order',
     ];
 
     protected function casts(): array
@@ -118,11 +119,47 @@ class Post extends Model
         return $this->cover_image !== null && ! str_starts_with($this->cover_image, '/');
     }
 
+    /**
+     * Published standalone pieces.
+     *
+     * Lessons are excluded here rather than at each call site. Every public
+     * listing — feed, sitemap, RSS, universe, subject, circle, home — goes
+     * through this one scope, so a lesson cannot leak into a listing where it
+     * would appear stranded, out of its course and out of sequence. Course
+     * pages ask for lessons explicitly.
+     *
+     * @param  Builder<Post>  $query
+     */
     public function scopePublished(Builder $query): Builder
     {
-        return $query->where('status', 'published')
+        return $query->where('kind', 'piece')
+            ->where('status', 'published')
             ->whereNotNull('published_at')
             ->where('published_at', '<=', now());
+    }
+
+    /** @param  Builder<Post>  $query */
+    public function scopePublishedLessons(Builder $query): Builder
+    {
+        return $query->where('kind', 'lesson')
+            ->where('status', 'published')
+            ->whereNotNull('published_at')
+            ->where('published_at', '<=', now());
+    }
+
+    public function isLesson(): bool
+    {
+        return $this->kind === 'lesson';
+    }
+
+    public function courseModule(): BelongsTo
+    {
+        return $this->belongsTo(CourseModule::class);
+    }
+
+    public function lessonProgress(): HasMany
+    {
+        return $this->hasMany(LessonProgress::class);
     }
 
     public function isPublished(): bool

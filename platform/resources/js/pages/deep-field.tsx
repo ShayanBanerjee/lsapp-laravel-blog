@@ -32,12 +32,7 @@ export default function DeepField({ layers }: { layers: Layer[] }) {
 
     return (
         <>
-            <Head title="The Deep Field">
-                <meta
-                    name="description"
-                    content="One continuous descent from the space between stars to the bottom of the sea, through all six universes."
-                />
-            </Head>
+            <Head title="The Deep Field" />
             {reduced ? <StaticDescent layers={layers} /> : <ZoomDescent layers={layers} />}
         </>
     );

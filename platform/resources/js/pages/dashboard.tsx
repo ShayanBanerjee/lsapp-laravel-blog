@@ -3,7 +3,7 @@ import { useCountUp } from '@/hooks/use-motion';
 import SiteLayout from '@/layouts/site-layout';
 import type { PostCard, SharedData } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
-import { Clock, Mail, PenLine, Pencil } from 'lucide-react';
+import { Clock, Mail, MailWarning, PenLine, Pencil } from 'lucide-react';
 
 interface MarkedPassage {
     slug: string;
@@ -32,6 +32,21 @@ export default function Dashboard({ posts, stats, markedPassages = [], unreadLet
                     Everything you've written, across every persona.
                 </p>
             </header>
+
+            {auth.user && auth.user.email_verified_at === null && (
+                <Panel className="mb-12 flex flex-wrap items-center gap-5 p-6">
+                    <MailWarning className="size-6 shrink-0" style={{ color: 'var(--u-accent)' }} />
+                    <div className="min-w-0 flex-1">
+                        <h2 className="text-lg font-semibold">Confirm your email to publish</h2>
+                        <p className="mt-1 text-sm" style={{ color: 'var(--u-text-muted)' }}>
+                            Reading, marking and saving all work already. Writing waits until we know the address is yours.
+                        </p>
+                    </div>
+                    <Link href={route('verification.notice')} className="u-btn u-btn-primary">
+                        Verify email
+                    </Link>
+                </Panel>
+            )}
 
             <div className="mb-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {[

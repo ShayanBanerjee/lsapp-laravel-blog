@@ -25,9 +25,7 @@ export default function UniverseShow({ universe, posts, writers, isFollowing }: 
 
     return (
         <SiteLayout wide>
-            <Head title={universe.name}>
-                <meta name="description" content={universe.description} />
-            </Head>
+            <Head title={universe.name} />
 
             {/* Full-bleed photographic hero, breaking out of the page gutter. */}
             <HeroImage src={universe.hero_image} credit={universe.hero_credit} className="-mx-5 -mt-10 mb-12 sm:-mx-8 sm:-mt-14">

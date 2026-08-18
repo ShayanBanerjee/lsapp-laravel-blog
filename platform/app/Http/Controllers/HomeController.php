@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Post;
 use App\Models\Universe;
 use App\Support\PostPresenter;
+use App\Support\Seo;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -34,6 +35,10 @@ class HomeController extends Controller
                 'posts' => Post::published()->count(),
                 'universes' => Universe::count(),
             ],
-        ]);
+        ])->withViewData(['seo' => Seo::forPage(
+            'Write in six worlds',
+            'A writing platform where readers mark the exact sentence that landed, so writers finally know which line did the work.',
+            route('home'),
+        )]);
     }
 }

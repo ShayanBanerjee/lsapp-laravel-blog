@@ -13,12 +13,14 @@ const NAV = [
     { label: 'Read', href: '/posts' },
     { label: 'Universes', href: '/universes' },
     { label: 'Subjects', href: '/categories' },
+    { label: 'Tutorials', href: '/learn' },
     { label: 'Circles', href: '/circles' },
     { label: 'Deep Field', href: '/deep-field' },
 ];
 
 export default function SiteLayout({ children, wide = false }: { children: ReactNode; wide?: boolean }) {
-    const { auth, url } = usePage<SharedData>().props as SharedData & { url?: string };
+    const { auth, url, unreadNotifications } = usePage<SharedData>().props as SharedData & { url?: string };
+    const unread = unreadNotifications ?? 0;
     const universe = useUniverse();
     const [menuOpen, setMenuOpen] = useState(false);
     const current = typeof window !== 'undefined' ? window.location.pathname : (url ?? '');
@@ -64,6 +66,20 @@ export default function SiteLayout({ children, wide = false }: { children: React
                                 <Link href="/write" className="u-btn u-btn-primary">
                                     <PenLine className="size-4" />
                                     Write
+                                </Link>
+                                <Link href="/following" className="u-btn u-btn-ghost">
+                                    Following
+                                </Link>
+                                <Link href="/notifications" className="u-btn u-btn-ghost relative" aria-label="What landed">
+                                    Landed
+                                    {unread > 0 && (
+                                        <span
+                                            className="ml-1 rounded-full px-1.5 py-0.5 text-[10px] leading-none tabular-nums"
+                                            style={{ background: 'var(--u-accent)', color: 'var(--u-accent-fg)' }}
+                                        >
+                                            {unread > 99 ? '99+' : unread}
+                                        </span>
+                                    )}
                                 </Link>
                                 <Link href="/library" className="u-btn u-btn-ghost" aria-label="Your library">
                                     Library
@@ -162,6 +178,9 @@ export default function SiteLayout({ children, wide = false }: { children: React
                     <div className="flex flex-wrap gap-5">
                         <Link href="/universes">Universes</Link>
                         <Link href="/categories">Subjects</Link>
+                        <Link href="/learn">Tutorials</Link>
+                        <Link href="/following">Following</Link>
+                        <Link href="/notifications">Landed</Link>
                         <Link href="/circles">Circles</Link>
                         <Link href="/deep-field">Deep Field</Link>
                         <Link href="/upgrade">Pricing</Link>

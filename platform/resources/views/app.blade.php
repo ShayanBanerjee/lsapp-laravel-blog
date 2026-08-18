@@ -60,7 +60,21 @@
         @routes
         @viteReactRefresh
         @vite(['resources/js/app.tsx', "resources/js/pages/{$page['component']}.tsx"])
-        @inertiaHead
+
+        {{--
+            @inertiaHead is deliberately absent.
+
+            With SSR on it would emit a second <title> and a second
+            <meta name="description"> from each page's <Head>, on top of the
+            ones above — two of each in the served HTML, and no guarantee which
+            one a scraper reads.
+
+            The tags above stay the single server-side source because they are
+            the only ones that survive the SSR process being down: Inertia falls
+            back to client rendering *silently* on a 500, and a page that lost
+            its <title> and og: tags that way would look completely fine in a
+            browser. <Head> still owns the title during client-side navigation.
+        --}}
     </head>
     <body class="font-sans antialiased">
         @inertia

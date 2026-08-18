@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Post;
 use App\Models\Universe;
 use App\Support\PostPresenter;
+use App\Support\Seo;
 use App\Support\UniverseContext;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -55,6 +56,11 @@ class UniverseController extends Controller
             'isFollowing' => $request->user()
                 ? $universe->followers()->where('user_id', $request->user()->id)->exists()
                 : false,
-        ]);
+        ])->withViewData(['seo' => Seo::forPage(
+            $universe->name,
+            $universe->description ?? $universe->tagline ?? '',
+            route('universes.show', $universe),
+            $universe->hero_image,
+        )]);
     }
 }

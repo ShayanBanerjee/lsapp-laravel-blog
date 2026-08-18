@@ -3,19 +3,23 @@
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\CircleController;
+use App\Http\Controllers\CourseController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeepFieldController;
 use App\Http\Controllers\FeedController;
 use App\Http\Controllers\FollowController;
 use App\Http\Controllers\HighlightController;
 use App\Http\Controllers\HomeController;
+use App\Http\Controllers\IntegrationController;
 use App\Http\Controllers\LetterController;
 use App\Http\Controllers\LibraryController;
 use App\Http\Controllers\PersonaController;
 use App\Http\Controllers\PostController;
 use App\Http\Controllers\ResponseController;
+use App\Http\Controllers\ThemeController;
 use App\Http\Controllers\UniverseController;
 use App\Http\Controllers\UpgradeController;
+use App\Http\Controllers\WriterController;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\Route;
 
@@ -48,6 +52,28 @@ Route::get('categories/{category}', [CategoryController::class, 'show'])->name('
 Route::get('circles', [CircleController::class, 'index'])->name('circles.index');
 Route::get('circles/{circle}', [CircleController::class, 'show'])->name('circles.show');
 
+/*
+ * Learning paths. Reading them is public like everything else; only recording
+ * progress needs an account, because progress is per-reader by definition.
+ */
+Route::get('learn', [CourseController::class, 'index'])->name('courses.index');
+Route::get('learn/{course}', [CourseController::class, 'show'])->name('courses.show');
+Route::get('learn/{course}/{lesson}', [CourseController::class, 'lesson'])->name('courses.lesson');
+
+/*
+ * Writer profiles. Public and readable by anyone, like everything else on the
+ * reading side. Shows what they wrote and which sentences landed — never a
+ * follower count.
+ */
+Route::get('writers/{persona}', [WriterController::class, 'show'])->name('writers.show');
+
+/*
+ * Vanity URL. Declared last in this file so it can never shadow a real route —
+ * the `@` prefix makes a collision impossible anyway, which is exactly why it
+ * is there rather than bare `/{handle}`.
+ */
+Route::get('@{persona}', [WriterController::class, 'show'])->name('writers.vanity');
+
 // The Deep Field — one continuous descent through all six universes.
 Route::get('deep-field', DeepFieldController::class)->name('deep-field');
 
@@ -59,10 +85,22 @@ Route::post('billing/webhook', [BillingController::class, 'webhook'])
 Route::middleware(['auth'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
 
-    Route::get('posts/{post}/edit', [PostController::class, 'edit'])->name('posts.edit');
-    Route::get('write', [PostController::class, 'create'])->name('posts.create');
-    Route::post('posts', [PostController::class, 'store'])->name('posts.store');
-    Route::put('posts/{post}', [PostController::class, 'update'])->name('posts.update');
+    /*
+     * Writing is gated on a verified address. Reading, marking, saving and
+     * following are not — that half of the product is free by design, and
+     * gating it would cost us readers in order to inconvenience spammers, who
+     * are not readers.
+     *
+     * `posts.destroy` sits deliberately outside the gate: taking your own work
+     * down must never require clearing an administrative hurdle first.
+     */
+    Route::middleware('verified')->group(function () {
+        Route::get('posts/{post}/edit', [PostController::class, 'edit'])->name('posts.edit');
+        Route::get('write', [PostController::class, 'create'])->name('posts.create');
+        Route::post('posts', [PostController::class, 'store'])->name('posts.store');
+        Route::put('posts/{post}', [PostController::class, 'update'])->name('posts.update');
+    });
+
     Route::delete('posts/{post}', [PostController::class, 'destroy'])->name('posts.destroy');
 
     Route::get('personas', [PersonaController::class, 'index'])->name('personas.index');
@@ -81,6 +119,43 @@ Route::middleware(['auth'])->group(function () {
     Route::post('circles/{circle}/membership', [CircleController::class, 'toggle'])->name('circles.toggle');
     Route::get('letters', [LetterController::class, 'index'])->name('letters.index');
 
+    Route::post('learn/{course}/{lesson}/progress', [CourseController::class, 'progress'])
+        ->name('courses.progress');
+
+    /*
+     * Outside tools. Export needs no account anywhere and works immediately;
+     * service connections are inert until the reader supplies their own token.
+     */
+    // The custom theme editor — premium, and gated server-side like the
+    // universe token sets it layers over.
+    Route::get('settings/theme', [ThemeController::class, 'edit'])->name('theme.edit');
+    Route::post('settings/theme', [ThemeController::class, 'store'])->name('theme.store');
+    Route::post('settings/theme/{theme}/activate', [ThemeController::class, 'activate'])->name('theme.activate');
+    Route::delete('settings/theme/active', [ThemeController::class, 'deactivate'])->name('theme.deactivate');
+    Route::delete('settings/theme/{theme}', [ThemeController::class, 'destroy'])->name('theme.destroy');
+
+    Route::get('settings/integrations', [IntegrationController::class, 'index'])->name('integrations.index');
+    Route::post('settings/integrations', [IntegrationController::class, 'connect'])->name('integrations.connect');
+    Route::delete('settings/integrations/{service}', [IntegrationController::class, 'disconnect'])->name('integrations.disconnect');
+    Route::post('settings/integrations/sync', [IntegrationController::class, 'sync'])->name('integrations.sync');
+
+    Route::get('posts/{post}/export.md', [IntegrationController::class, 'exportPost'])->name('posts.export');
+    Route::get('posts/{post}/highlights.md', [IntegrationController::class, 'exportHighlights'])->name('posts.export.highlights');
+
+    /*
+     * Manuscript formats and deposit. Not "submit to IEEE" — that has no API
+     * and could not work; this is the file their portal asks for, plus Zenodo,
+     * which does mint a real DOI.
+     */
+    Route::get('posts/{post}/manuscript.tex', [IntegrationController::class, 'exportLatex'])->name('posts.export.latex');
+    Route::get('posts/{post}/manuscript.docx', [IntegrationController::class, 'exportDocx'])->name('posts.export.docx');
+    Route::post('posts/{post}/deposit', [IntegrationController::class, 'deposit'])->name('posts.deposit');
+    Route::post('settings/citation', [IntegrationController::class, 'citation'])->name('integrations.citation');
+
+    Route::get('following', [WriterController::class, 'following'])->name('writers.following');
+    Route::get('notifications', [WriterController::class, 'notifications'])->name('writers.notifications');
+    Route::delete('notifications', [WriterController::class, 'clear'])->name('writers.notifications.clear');
+
     Route::get('library', [LibraryController::class, 'index'])->name('library.index');
     Route::post('posts/{post}/bookmark', [LibraryController::class, 'toggle'])->name('library.toggle');
 
@@ -96,7 +171,7 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('highlights/{highlight}', [HighlightController::class, 'destroy'])->name('highlights.destroy');
     });
 
-    Route::middleware('throttle:prose')->group(function () {
+    Route::middleware(['verified', 'throttle:prose'])->group(function () {
         Route::post('posts/{post}/responses', [ResponseController::class, 'store'])->name('responses.store');
         Route::post('posts/{post}/letters', [LetterController::class, 'store'])->name('letters.store');
     });
