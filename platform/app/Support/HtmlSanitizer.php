@@ -10,7 +10,29 @@ namespace App\Support;
  */
 class HtmlSanitizer
 {
-    private const ALLOWED_TAGS = '<p><br><strong><em><s><code><pre><blockquote><h2><h3><h4><ul><ol><li><a><hr>';
+    private const ALLOWED_TAGS = '<p><br><strong><em><s><code><pre><blockquote><h2><h3><h4><ul><ol><li><a><hr>'
+        .'<figure><figcaption><img>';
+
+    /**
+     * Attributes kept, per tag. Everything not listed here is dropped.
+     *
+     * This is an allowlist of *names* and a validator for each *value*, because
+     * a name-only allowlist still lets `src="javascript:…"` through. Nothing
+     * here may ever grow to include `style` or anything matching `on*`.
+     *
+     * The `data-story-*` set is what makes storytelling blocks survive a round
+     * trip through the sanitizer — they carry no behaviour themselves, only a
+     * label the renderer reads to decide how to present the block.
+     */
+    private const ALLOWED_ATTRIBUTES = [
+        'a' => ['href'],
+        'img' => ['src', 'alt'],
+        'figure' => ['data-story', 'data-story-value', 'data-story-label'],
+        'figcaption' => [],
+    ];
+
+    /** The only storytelling block kinds that may appear in a body. */
+    private const STORY_KINDS = ['pinned', 'steps', 'before-after', 'callout'];
 
     public static function clean(string $html): string
     {
@@ -22,34 +44,75 @@ class HtmlSanitizer
 
         $html = strip_tags($html, self::ALLOWED_TAGS);
 
-        // Drop every attribute except href on anchors.
+        // Rebuild every tag from scratch, keeping only allowlisted attributes
+        // with values that pass their own validator. Rebuilding rather than
+        // filtering means a malformed or duplicated attribute cannot survive by
+        // hiding in the part of the string we did not rewrite.
         $html = preg_replace_callback(
             '/<([a-z0-9]+)\b([^>]*)>/i',
             static function (array $match): string {
                 $tag = strtolower($match[1]);
+                $allowed = self::ALLOWED_ATTRIBUTES[$tag] ?? [];
 
-                if ($tag !== 'a') {
+                if ($allowed === []) {
                     return '<'.$tag.'>';
                 }
 
-                if (! preg_match('/\bhref\s*=\s*("|\')(.*?)\1/i', $match[2], $href)) {
-                    return '<a>';
+                $kept = '';
+
+                foreach ($allowed as $name) {
+                    if (! preg_match('/\b'.preg_quote($name, '/').'\s*=\s*("|\')(.*?)\1/i', $match[2], $found)) {
+                        continue;
+                    }
+
+                    $value = self::attributeValue($tag, $name, trim(html_entity_decode($found[2])));
+
+                    if ($value === null) {
+                        continue;
+                    }
+
+                    $kept .= ' '.$name.'="'.htmlspecialchars($value, ENT_QUOTES).'"';
                 }
 
-                $url = trim(html_entity_decode($href[2]));
-
-                // Allowlist the schemes rather than blocklisting javascript:,
-                // which is trivially bypassed with entities and whitespace.
-                if (! preg_match('#^(https?://|mailto:|/)#i', $url)) {
-                    return '<a>';
+                // Outbound links are never same-origin trusted.
+                if ($tag === 'a') {
+                    return $kept === '' ? '<a>' : '<a'.$kept.' rel="noopener nofollow" target="_blank">';
                 }
 
-                return '<a href="'.htmlspecialchars($url, ENT_QUOTES).'" rel="noopener nofollow" target="_blank">';
+                return '<'.$tag.$kept.'>';
             },
             $html
         );
 
         return trim($html ?? '');
+    }
+
+    /**
+     * Validate one attribute value, or reject it.
+     *
+     * Returns null to drop the attribute entirely rather than to empty it —
+     * an `<img src="">` is a broken image, an absent src is just no image.
+     */
+    private static function attributeValue(string $tag, string $name, string $value): ?string
+    {
+        return match (true) {
+            // Allowlist schemes rather than blocklisting javascript:, which is
+            // trivially bypassed with entities, whitespace and casing.
+            $name === 'href' => preg_match('#^(https?://|mailto:|/)#i', $value) ? $value : null,
+
+            // Images may come from our own storage or an https source. No
+            // data: URIs — they are an SVG-script vector.
+            $name === 'src' => preg_match('#^(https://|/)#i', $value) ? $value : null,
+
+            $name === 'data-story' => in_array($value, self::STORY_KINDS, true) ? $value : null,
+
+            // Free text, but bounded and stripped of markup.
+            $name === 'alt', $name === 'data-story-label' => mb_substr(strip_tags($value), 0, 200),
+
+            $name === 'data-story-value' => mb_substr(strip_tags($value), 0, 40),
+
+            default => null,
+        };
     }
 
     /**

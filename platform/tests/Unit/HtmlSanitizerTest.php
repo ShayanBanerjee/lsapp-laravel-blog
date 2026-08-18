@@ -66,11 +66,86 @@ class HtmlSanitizerTest extends TestCase
         $this->assertStringContainsString('rel="noopener nofollow"', $clean);
     }
 
-    public function test_it_strips_image_tags_since_they_are_not_allowlisted(): void
+    /*
+     * Images became allowlisted when storytelling blocks landed. The tag is
+     * permitted; everything that made it dangerous is not.
+     */
+
+    public function test_it_strips_event_handlers_and_unsafe_sources_from_images(): void
     {
         $clean = HtmlSanitizer::clean('<img src=x onerror="alert(1)">');
 
-        $this->assertSame('', $clean);
+        $this->assertStringNotContainsString('onerror', $clean);
+        $this->assertStringNotContainsString('alert', $clean);
+        // Unquoted `src=x` is not a value we accept, so no src survives.
+        $this->assertStringNotContainsString('src', $clean);
+    }
+
+    public function test_it_rejects_image_sources_that_are_not_https_or_local(): void
+    {
+        foreach ([
+            '<img src="javascript:alert(1)" alt="x">',
+            '<img src="data:image/svg+xml;base64,PHN2Zz48c2NyaXB0Pg==" alt="x">',
+            '<img src="http://insecure.example.com/a.png" alt="x">',
+        ] as $payload) {
+            $clean = HtmlSanitizer::clean($payload);
+
+            $this->assertStringNotContainsString('src=', $clean, $payload);
+        }
+    }
+
+    public function test_it_keeps_safe_image_sources(): void
+    {
+        $this->assertStringContainsString('src="/images/covers/cosmos-1.jpg"', HtmlSanitizer::clean('<img src="/images/covers/cosmos-1.jpg" alt="A galaxy">'));
+        $this->assertStringContainsString('alt="A galaxy"', HtmlSanitizer::clean('<img src="/images/covers/cosmos-1.jpg" alt="A galaxy">'));
+        $this->assertStringContainsString('src="https://example.com/a.png"', HtmlSanitizer::clean('<img src="https://example.com/a.png">'));
+    }
+
+    /* -------------------- storytelling blocks -------------------- */
+
+    public function test_it_keeps_known_storytelling_block_kinds(): void
+    {
+        foreach (['pinned', 'steps', 'before-after', 'callout'] as $kind) {
+            $clean = HtmlSanitizer::clean('<figure data-story="'.$kind.'"><p>Body</p></figure>');
+
+            $this->assertStringContainsString('data-story="'.$kind.'"', $clean, $kind);
+        }
+    }
+
+    /**
+     * The renderer switches on this value, so an unknown one must not survive —
+     * otherwise a body could smuggle in an arbitrary attribute value that some
+     * future renderer branch trusts.
+     */
+    public function test_it_drops_unknown_storytelling_kinds(): void
+    {
+        $clean = HtmlSanitizer::clean('<figure data-story="../../etc"><p>Body</p></figure>');
+
+        $this->assertStringNotContainsString('data-story=', $clean);
+        $this->assertStringContainsString('<figure>', $clean);
+    }
+
+    public function test_it_drops_style_and_unlisted_attributes_from_storytelling_blocks(): void
+    {
+        $clean = HtmlSanitizer::clean(
+            '<figure data-story="callout" style="position:fixed" onclick="steal()" data-evil="1"><p>Body</p></figure>'
+        );
+
+        $this->assertStringContainsString('data-story="callout"', $clean);
+        $this->assertStringNotContainsString('style', $clean);
+        $this->assertStringNotContainsString('onclick', $clean);
+        $this->assertStringNotContainsString('data-evil', $clean);
+    }
+
+    public function test_it_bounds_storytelling_label_length_and_strips_markup(): void
+    {
+        $clean = HtmlSanitizer::clean(
+            '<figure data-story="callout" data-story-label="'.str_repeat('a', 400).'"><p>B</p></figure>'
+        );
+
+        preg_match('/data-story-label="([^"]*)"/', $clean, $found);
+
+        $this->assertLessThanOrEqual(200, strlen($found[1] ?? ''));
     }
 
     public function test_excerpts_are_plain_text_and_truncated(): void

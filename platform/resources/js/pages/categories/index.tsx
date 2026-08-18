@@ -23,9 +23,7 @@ function CategoryIcon({ name, className }: { name: string | null; className?: st
 export default function CategoriesIndex({ categories }: { categories: CategoryRow[] }) {
     return (
         <SiteLayout wide>
-            <Head title="Categories">
-                <meta name="description" content="Browse writing by subject — technology, science, nature, travel, politics, craft and more." />
-            </Head>
+            <Head title="Categories" />
 
             <header className="mb-12 max-w-3xl">
                 <h1 className="font-display text-4xl sm:text-6xl">Browse by subject</h1>

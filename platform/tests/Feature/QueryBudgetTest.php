@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Models\Course;
+use App\Models\CourseModule;
 use App\Models\Highlight;
 use App\Models\Persona;
 use App\Models\Post;
@@ -189,5 +191,58 @@ class QueryBudgetTest extends TestCase
         $count = $this->countQueries(fn () => $this->get('/circles')->assertOk());
 
         $this->assertLessThan(12, $count, "Circle index used {$count} queries.");
+    }
+
+    /**
+     * The contents panel renders every lesson of the course on every lesson
+     * page — the most-visited listing in a tutorial, and the easiest place to
+     * write an N+1 without noticing.
+     */
+    public function test_a_lesson_page_does_not_fan_out_with_the_size_of_its_course(): void
+    {
+        [$user, $persona] = $this->writer();
+
+        $course = Course::create([
+            'slug' => 'a-course',
+            'title' => 'A Course',
+            'user_id' => $user->id,
+            'persona_id' => $persona->id,
+            'universe_id' => $persona->universe_id,
+            'status' => 'published',
+            'published_at' => now()->subDay(),
+        ]);
+
+        $module = CourseModule::create(['course_id' => $course->id, 'title' => 'Module', 'sort_order' => 0]);
+
+        $addLessons = function (int $from, int $to) use ($user, $persona, $module) {
+            for ($i = $from; $i < $to; $i++) {
+                Post::create([
+                    'user_id' => $user->id,
+                    'persona_id' => $persona->id,
+                    'universe_id' => $persona->universe_id,
+                    'slug' => "lesson-{$i}",
+                    'title' => "Lesson {$i}",
+                    'body' => '<p>Body.</p>',
+                    'status' => 'published',
+                    'published_at' => now()->subDay(),
+                    'kind' => 'lesson',
+                    'course_module_id' => $module->id,
+                    'sort_order' => $i,
+                ]);
+            }
+        };
+
+        $addLessons(0, 3);
+
+        $measure = fn () => $this->countQueries(
+            fn () => $this->get("/learn/{$course->slug}/lesson-0")->assertOk()
+        );
+
+        $measure();                  // discard: warms anything request-scoped
+        $small = $measure();
+
+        $addLessons(3, 40);
+
+        $this->assertSame($small, $measure(), 'lesson page query count grew with the number of lessons');
     }
 }

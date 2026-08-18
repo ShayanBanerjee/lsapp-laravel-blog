@@ -1,3 +1,4 @@
+import { useStoryBlocks } from '@/hooks/use-story-blocks';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 export interface Passage {
@@ -139,6 +140,13 @@ export function Readable({
     const containerRef = useRef<HTMLDivElement>(null);
     const [anchor, setAnchor] = useState<SelectionAnchor | null>(null);
     const [toolbar, setToolbar] = useState<{ x: number; y: number } | null>(null);
+
+    /*
+     * Storytelling blocks are enhanced after every repaint, not once on mount:
+     * the repaint below replaces innerHTML wholesale, so anything attached to
+     * the old nodes is gone the moment a reader marks a passage.
+     */
+    useStoryBlocks(containerRef, [html, passages, own]);
 
     /**
      * Repaint marks from scratch whenever they change.

@@ -13,6 +13,7 @@ class DatabaseSeeder extends Seeder
             CircleSeeder::class,
             CategorySeeder::class,
             DemoContentSeeder::class,
+            CourseSeeder::class,
         ]);
     }
 }

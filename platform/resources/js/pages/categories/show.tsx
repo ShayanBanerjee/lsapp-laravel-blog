@@ -20,9 +20,7 @@ interface Props {
 export default function CategoryShow({ category, posts }: Props) {
     return (
         <SiteLayout wide>
-            <Head title={category.name}>
-                <meta name="description" content={category.description ?? `Writing about ${category.name}.`} />
-            </Head>
+            <Head title={category.name} />
 
             <Link href="/categories" className="mb-8 inline-flex items-center gap-2 text-sm" style={{ color: 'var(--u-text-muted)' }}>
                 <ArrowLeft className="size-4" />

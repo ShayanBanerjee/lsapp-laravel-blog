@@ -6,6 +6,7 @@ use App\Models\Post;
 use App\Models\Prompt;
 use App\Models\Response as ModelsResponse;
 use App\Support\Ads;
+use App\Support\CopyDetection;
 use App\Support\HtmlSanitizer;
 use App\Support\PostPresenter;
 use App\Support\Seo;
@@ -44,12 +45,26 @@ class PostController extends Controller
                 'q' => $request->query('q'),
             ],
             'ads' => Ads::forRequest($request, 'feed'),
-        ]);
+        ])->withViewData(['seo' => Seo::forPage(
+            'Read',
+            'Everything published across all six worlds — marked, quoted and answered passage by passage.',
+            route('posts.index'),
+        )]);
     }
 
-    public function show(Request $request, Post $post): Response
+    public function show(Request $request, Post $post): Response|RedirectResponse
     {
         $this->authorize('view', $post);
+
+        /*
+         * A lesson is a post, so it is reachable at /posts/{slug} — but read
+         * there it arrives with no course, no contents panel and no sense of
+         * where it sits in the sequence. Send it home, and keep one canonical
+         * URL per lesson while we are at it.
+         */
+        if ($post->isLesson() && $post->courseModule?->course) {
+            return redirect()->route('courses.lesson', [$post->courseModule->course, $post], 301);
+        }
 
         $user = $request->user();
         $post->load(['persona.universe', 'universe', 'user', 'categories'])->loadCount('highlights');
@@ -172,7 +187,8 @@ class PostController extends Controller
             'published_at' => $data['status'] === 'published' ? now() : null,
         ]);
 
-        return to_route('posts.show', $post)->with('success', 'Your piece is live.');
+        return to_route('posts.show', $post)
+            ->with('success', $this->afterPublish($post) ?? 'Your piece is live.');
     }
 
     public function edit(Request $request, Post $post): Response
@@ -221,7 +237,33 @@ class PostController extends Controller
                 : null,
         ]);
 
-        return to_route('posts.show', $post)->with('success', 'Changes saved.');
+        return to_route('posts.show', $post)
+            ->with('success', $this->afterPublish($post) ?? 'Changes saved.');
+    }
+
+    /**
+     * Fingerprint a published piece and tell the author if it closely matches
+     * something already here.
+     *
+     * Told to the *author*, not enforced against them. A near-duplicate has
+     * legitimate explanations — reposting your own work, quoting a primary
+     * document — so this surfaces a fact and leaves the judgement to a human.
+     * Drafts are skipped: nothing unpublished can have been copied *from*.
+     */
+    private function afterPublish(Post $post): ?string
+    {
+        if (! $post->isPublished()) {
+            return null;
+        }
+
+        $flags = CopyDetection::check($post);
+
+        if ($flags->isEmpty()) {
+            return null;
+        }
+
+        return 'Published. Note: this closely matches '.$flags->count().' piece(s) already here — '
+            .'up to '.$flags->max('containment').'% of it appears in one of them. Flagged for review.';
     }
 
     public function destroy(Request $request, Post $post): RedirectResponse

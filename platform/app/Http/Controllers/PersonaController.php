@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Persona;
 use App\Models\Universe;
 use App\Models\User;
+use App\Rules\VanityHandle;
 use App\Support\UniverseContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -47,7 +48,13 @@ class PersonaController extends Controller
         $this->authorize('create', Persona::class);
 
         $data = $request->validate([
-            'handle' => ['required', 'string', 'max:30', 'alpha_dash', Rule::unique('personas', 'handle')],
+            'handle' => [
+                'required', 'string', 'max:30', 'alpha_dash',
+                Rule::unique('personas', 'handle'),
+                // Short handles are the paid tier; reserved words are blocked
+                // for everyone, premium or not.
+                new VanityHandle($request->user()->is_premium),
+            ],
             'display_name' => ['required', 'string', 'max:60'],
             'bio' => ['nullable', 'string', 'max:400'],
             'universe_id' => ['required', 'exists:universes,id'],

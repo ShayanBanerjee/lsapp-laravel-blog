@@ -44,6 +44,8 @@ export interface SharedData {
     universeIndex: UniversePreview[];
     reading: ReadingPreferences;
     socialProviders: string[];
+    /** Badge count only; the notifications themselves load on their own page. */
+    unreadNotifications: number;
     flash: { success: string | null; error: string | null };
     [key: string]: unknown;
 }

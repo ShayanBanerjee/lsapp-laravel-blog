@@ -2,16 +2,17 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Support\ReadingPreferences;
 use Database\Factories\UserFactory;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-class User extends Authenticatable
+class User extends Authenticatable implements MustVerifyEmail
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
@@ -148,5 +149,32 @@ class User extends Authenticatable
     {
         return $this->is_premium
             || $this->personas()->count() < self::FREE_PERSONA_LIMIT;
+    }
+
+    /**
+     * Abandoned signups: unverified, older than the grace window, and empty.
+     *
+     * The exclusions matter more than the rule. An account that holds *any*
+     * trace of a human — a persona, a draft, a mark, a letter, a response, a
+     * saved piece — is never a throwaway, and deleting it would destroy work.
+     * Social identities are excluded for a separate reason: a provider that
+     * does not assert a verified address (Facebook) leaves a perfectly real
+     * person sitting at `email_verified_at = null` forever, and they must not
+     * be swept up by a cleanup aimed at registration spam.
+     *
+     * @param  Builder<User>  $query
+     */
+    public function scopeAbandonedUnverified(Builder $query, int $days): void
+    {
+        $query->whereNull('email_verified_at')
+            ->where('created_at', '<', now()->subDays($days))
+            ->whereDoesntHave('socialIdentities')
+            ->whereDoesntHave('personas')
+            ->whereDoesntHave('posts')
+            ->whereDoesntHave('highlights')
+            ->whereDoesntHave('responses')
+            ->whereDoesntHave('lettersSent')
+            ->whereDoesntHave('lettersReceived')
+            ->whereDoesntHave('bookmarks');
     }
 }

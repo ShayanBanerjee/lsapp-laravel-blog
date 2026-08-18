@@ -43,10 +43,16 @@ class RegisteredUserController extends Controller
             'password' => Hash::make($request->password),
         ]);
 
+        // `Registered` is what sends the verification mail, via Laravel's
+        // SendEmailVerificationNotification listener — it only fires because
+        // User implements MustVerifyEmail.
         event(new Registered($user));
 
         Auth::login($user);
 
-        return to_route('dashboard');
+        // Straight to the notice rather than the dashboard: the address was
+        // typed seconds ago, so this is the one moment the reader is certain
+        // to still have the inbox open.
+        return to_route('verification.notice');
     }
 }

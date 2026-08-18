@@ -85,4 +85,12 @@ return [
         'webhook_secret' => env('STRIPE_WEBHOOK_SECRET'),
     ],
 
+    /*
+     * Zenodo mints real, permanent DOIs. Sandbox by default so a test deposit
+     * cannot accidentally become a citable record that can never be withdrawn.
+     */
+    'zenodo' => [
+        'sandbox' => (bool) env('ZENODO_SANDBOX', true),
+    ],
+
 ];

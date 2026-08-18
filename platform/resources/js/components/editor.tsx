@@ -1,8 +1,9 @@
+import { STORY_KINDS, StoryBlock, type StoryKind } from '@/components/story-blocks';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
 import { EditorContent, useEditor, type Editor as TiptapEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import { Bold, Code, Heading2, Heading3, Italic, Link2, List, ListOrdered, Quote, Redo2, Strikethrough, Undo2 } from 'lucide-react';
+import { Bold, Clapperboard, Code, Heading2, Heading3, Italic, Link2, List, ListOrdered, Quote, Redo2, Strikethrough, Undo2 } from 'lucide-react';
 import type { ComponentType } from 'react';
 
 /**
@@ -17,6 +18,7 @@ export function Editor({ value, onChange }: { value: string; onChange: (html: st
             StarterKit.configure({ heading: { levels: [2, 3, 4] } }),
             Placeholder.configure({ placeholder: 'Begin where the world begins…' }),
             Link.configure({ openOnClick: false, autolink: true }),
+            StoryBlock,
         ],
         content: value,
         onUpdate: ({ editor }) => onChange(editor.getHTML()),
@@ -109,12 +111,70 @@ function Toolbar({ editor }: { editor: TiptapEditor }) {
                 }}
             />
 
+            <Divider />
+
+            <StoryMenu editor={editor} />
+
             <div className="ml-auto flex gap-0.5">
                 <Tool icon={Undo2} label="Undo" onClick={() => editor.chain().focus().undo().run()} disabled={!editor.can().undo()} />
                 <Tool icon={Redo2} label="Redo" onClick={() => editor.chain().focus().redo().run()} disabled={!editor.can().redo()} />
             </div>
         </div>
     );
+}
+
+/**
+ * Storytelling blocks. A plain <details> rather than a popover component —
+ * it needs no state, closes on its own, and is keyboard-operable for free.
+ */
+function StoryMenu({ editor }: { editor: TiptapEditor }) {
+    return (
+        <details className="relative">
+            <summary
+                className="flex cursor-pointer list-none items-center gap-1.5 rounded-[7px] p-2 text-xs transition-colors"
+                style={{ color: 'var(--u-text-muted)' }}
+                title="Insert a storytelling block"
+            >
+                <Clapperboard className="size-4" />
+                Story block
+            </summary>
+
+            <div
+                className="absolute top-full left-0 z-20 mt-1 w-64 rounded-[10px] border p-1.5 shadow-lg"
+                style={{ borderColor: 'var(--u-border)', background: 'var(--u-surface-1)' }}
+            >
+                {STORY_KINDS.map(({ kind, label, hint }) => (
+                    <button
+                        key={kind}
+                        type="button"
+                        onClick={() => insert(editor, kind)}
+                        className="block w-full rounded-[7px] px-2.5 py-2 text-left transition-colors hover:bg-[var(--u-surface-2)]"
+                    >
+                        <span className="block text-sm">{label}</span>
+                        <span className="block text-xs" style={{ color: 'var(--u-text-muted)' }}>
+                            {hint}
+                        </span>
+                    </button>
+                ))}
+            </div>
+        </details>
+    );
+}
+
+function insert(editor: TiptapEditor, kind: StoryKind) {
+    if (kind === 'callout') {
+        const value = window.prompt('The number or figure to show large', '68%');
+
+        if (value === null) return;
+
+        const label = window.prompt('A short label beneath it (optional)', '') ?? '';
+
+        editor.chain().focus().setStoryBlock(kind).updateAttributes('storyBlock', { value, label }).run();
+
+        return;
+    }
+
+    editor.chain().focus().setStoryBlock(kind).run();
 }
 
 function Divider() {

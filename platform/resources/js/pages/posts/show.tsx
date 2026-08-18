@@ -8,7 +8,7 @@ import { ShareMenu } from '@/components/share-menu';
 import SiteLayout from '@/layouts/site-layout';
 import type { PostCard as PostCardData, SharedData, Universe } from '@/types';
 import { Link, router, useForm, usePage } from '@inertiajs/react';
-import { ArrowLeft, Bookmark, Clock, Highlighter, Mail, Pencil, Quote, Star, Trash2 } from 'lucide-react';
+import { ArrowLeft, Bookmark, Clock, Download, Highlighter, Mail, Pencil, Quote, Star, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 interface ResponseRow {
@@ -145,6 +145,13 @@ export default function PostShow({ post, universe, related, passages, myHighligh
                             )}
 
                             <ShareMenu url={seo.canonical} title={post.title} quote={sharedQuote} />
+
+                            {/* Markdown out. A vault is a folder of files, so a
+                                file in their format is the whole integration. */}
+                            <a href={`/posts/${post.slug}/export.md`} className="u-btn u-btn-ghost" title="Download as Markdown">
+                                <Download className="size-3.5" />
+                                Markdown
+                            </a>
                         </span>
 
                         {(post.can.update || post.can.delete) && (

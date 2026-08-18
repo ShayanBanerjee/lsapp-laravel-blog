@@ -114,4 +114,19 @@ return [
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Unverified Account Grace Period
+    |--------------------------------------------------------------------------
+    |
+    | How many days an unverified, empty signup is kept before
+    | `users:prune-unverified` removes it. Generous on purpose: someone who
+    | registers, gets interrupted, and comes back a fortnight later should
+    | still find their account. Only accounts holding no content at all are
+    | ever eligible — see User::scopeAbandonedUnverified().
+    |
+    */
+
+    'unverified_grace_days' => (int) env('AUTH_UNVERIFIED_GRACE_DAYS', 30),
+
 ];

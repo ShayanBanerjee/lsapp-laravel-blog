@@ -41,6 +41,28 @@ class Seo
         ];
     }
 
+    /**
+     * Metadata for a page that is not an article — a universe, a subject, a
+     * circle, the Deep Field.
+     *
+     * These are shareable surfaces too, and until they carried their own tags
+     * a link to any of them unfurled with the generic site description. The
+     * page's own <Head> could not fix that: social scrapers do not run
+     * JavaScript, so anything Inertia injects client-side is invisible to them.
+     *
+     * @return array<string, mixed>
+     */
+    public static function forPage(string $title, string $description, string $canonical, ?string $image = null): array
+    {
+        return [
+            'title' => $title,
+            'description' => HtmlSanitizer::excerpt($description, 155),
+            'canonical' => $canonical,
+            'image' => $image ? url($image) : null,
+            'type' => 'website',
+        ];
+    }
+
     /** @return array<string, mixed> */
     private static function articleSchema(Post $post, string $url, string $description, ?string $image): array
     {
