@@ -1,0 +1,760 @@
+@import 'tailwindcss';
+
+@plugin 'tailwindcss-animate';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+    --font-sans:
+        'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+
+    --radius-lg: var(--radius);
+    --radius-md: calc(var(--radius) - 2px);
+    --radius-sm: calc(var(--radius) - 4px);
+
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+
+    --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+
+    --color-chart-1: var(--chart-1);
+    --color-chart-2: var(--chart-2);
+    --color-chart-3: var(--chart-3);
+    --color-chart-4: var(--chart-4);
+    --color-chart-5: var(--chart-5);
+
+    --color-sidebar: var(--sidebar-background);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-ring: var(--sidebar-ring);
+}
+
+/*
+  The default border color has changed to `currentColor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+    *,
+    ::after,
+    ::before,
+    ::backdrop,
+    ::file-selector-button {
+        border-color: var(--color-gray-200, currentColor);
+    }
+}
+
+:root {
+    --background: hsl(0, 0%, 100%);
+    --foreground: hsl(0, 0%, 3.9%);
+    --card: hsl(0, 0%, 100%);
+    --card-foreground: hsl(0, 0%, 3.9%);
+    --popover: hsl(0, 0%, 100%);
+    --popover-foreground: hsl(0, 0%, 3.9%);
+    --primary: hsl(0, 0%, 9%);
+    --primary-foreground: hsl(0, 0%, 98%);
+    --secondary: hsl(0, 0%, 96.1%);
+    --secondary-foreground: hsl(0, 0%, 9%);
+    --muted: hsl(0, 0%, 96.1%);
+    --muted-foreground: hsl(0, 0%, 45.1%);
+    --accent: hsl(0, 0%, 96.1%);
+    --accent-foreground: hsl(0, 0%, 9%);
+    --destructive: hsl(0, 84.2%, 60.2%);
+    --destructive-foreground: hsl(0, 0%, 98%);
+    --border: hsl(0, 0%, 92.8%);
+    --input: hsl(0, 0%, 89.8%);
+    --ring: hsl(0, 0%, 3.9%);
+    --chart-1: hsl(12, 76%, 61%);
+    --chart-2: hsl(173, 58%, 39%);
+    --chart-3: hsl(197, 37%, 24%);
+    --chart-4: hsl(43, 74%, 66%);
+    --chart-5: hsl(27, 87%, 67%);
+    --radius: 0.5rem;
+    --sidebar-background: hsl(0, 0%, 98%);
+    --sidebar-foreground: hsl(240, 5.3%, 30%);
+    --sidebar-primary: hsl(0, 0%, 10%);
+    --sidebar-primary-foreground: hsl(0, 0%, 98%);
+    --sidebar-accent: hsl(0, 0%, 94%);
+    --sidebar-accent-foreground: hsl(0, 0%, 30%);
+    --sidebar-border: hsl(0, 0%, 91%);
+    --sidebar-ring: hsl(217.2, 91.2%, 59.8%);
+}
+
+.dark {
+    --background: hsl(0, 0%, 3.9%);
+    --foreground: hsl(0, 0%, 98%);
+    --card: hsl(0, 0%, 3.9%);
+    --card-foreground: hsl(0, 0%, 98%);
+    --popover: hsl(0, 0%, 3.9%);
+    --popover-foreground: hsl(0, 0%, 98%);
+    --primary: hsl(0, 0%, 98%);
+    --primary-foreground: hsl(0, 0%, 9%);
+    --secondary: hsl(0, 0%, 14.9%);
+    --secondary-foreground: hsl(0, 0%, 98%);
+    --muted: hsl(0, 0%, 6.9%);
+    --muted-foreground: hsl(0, 0%, 63.9%);
+    --accent: hsl(0, 0%, 14.9%);
+    --accent-foreground: hsl(0, 0%, 98%);
+    --destructive: hsl(0, 84%, 60%);
+    --destructive-foreground: hsl(0, 0%, 98%);
+    --border: hsl(0, 0%, 14.9%);
+    --input: hsl(0, 0%, 14.9%);
+    --ring: hsl(0, 0%, 83.1%);
+    --chart-1: hsl(220, 70%, 50%);
+    --chart-2: hsl(160, 60%, 45%);
+    --chart-3: hsl(30, 80%, 55%);
+    --chart-4: hsl(280, 65%, 60%);
+    --chart-5: hsl(340, 75%, 55%);
+    --sidebar-background: hsl(0, 0%, 7%);
+    --sidebar-foreground: hsl(0, 0%, 80%);
+    --sidebar-primary: hsl(360, 100%, 100%);
+    --sidebar-primary-foreground: hsl(0, 0%, 100%);
+    --sidebar-accent: hsl(0, 0%, 15.9%);
+    --sidebar-accent-foreground: hsl(240, 4.8%, 95.9%);
+    --sidebar-border: hsl(0, 0%, 15.9%);
+    --sidebar-ring: hsl(217.2, 91.2%, 59.8%);
+}
+
+@layer base {
+    * {
+        @apply border-border;
+    }
+
+    body {
+        @apply bg-background text-foreground;
+    }
+}
+
+/* ============================================================================
+   METALLIC UNIVERSE SYSTEM
+
+   One token contract, six worlds. Token *values* are served from the database
+   (universes.theme) and injected as inline custom properties by <UniverseRoot>,
+   so a seventh universe is a seeder row and nothing else.
+
+   Components never branch on universe. If a component needs to know which world
+   it is in, the theming layer is wrong.
+   ============================================================================ */
+
+:root {
+    /* Fallbacks only — the server overrides all of these per request. */
+    --u-bg: #080a14;
+    --u-bg-deep: #04050c;
+    --u-surface-1: #111527;
+    --u-surface-2: #1a2039;
+    --u-border: #2c3454;
+    --u-text: #eaecf8;
+    --u-text-muted: #a8b0d0;
+    --u-accent: #9b8cff;
+    --u-accent-fg: #07040f;
+    --u-accent-soft: #9b8cff2e;
+    --u-metal-base: #262d4a;
+    --u-metal-sheen: #cdd6ff;
+    --u-metal-edge: #7d8ad4;
+    --u-metal-shadow: #03040a;
+    --u-grain-angle: 115deg;
+    --u-glow: #9b8cff;
+    --u-halo: radial-gradient(ellipse 120% 70% at 50% -10%, #6f5cff33, transparent 65%);
+
+    /* Invariants — identical in every universe. */
+    --u-r: 14px;
+    --u-r-sm: 9px;
+    --u-r-lg: 22px;
+    --u-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* In @layer components so Tailwind utilities (hidden, flex, spacing) still win
+   the cascade — unlayered rules would beat every utility class. */
+@layer components {
+    .u-root {
+        background-color: var(--u-bg);
+        color: var(--u-text);
+        min-height: 100vh;
+        font-feature-settings: 'kern', 'liga', 'calt';
+        /* Safety net against horizontal blowout from one long word or a
+           full-bleed child. `clip` rather than `hidden`: it does not create a
+           scroll container, so the sticky header keeps working. */
+        overflow-x: clip;
+        /* Switching persona switches universe, and therefore every token at
+           once. Easing the two root colours turns a hard flash into a crossfade;
+           descendants inherit the new variables instantly underneath it. */
+        transition:
+            background-color 0.55s var(--u-ease),
+            color 0.55s var(--u-ease);
+    }
+
+    /* --- Scroll reveal ---------------------------------------------------
+       Paired with useReveal. `.is-visible` is applied immediately under
+       reduced motion, so content is never left hidden. */
+    .u-reveal {
+        opacity: 0;
+        transform: translate3d(0, 18px, 0);
+        transition:
+            opacity 0.7s var(--u-ease),
+            transform 0.7s var(--u-ease);
+    }
+
+    .u-reveal.is-visible {
+        opacity: 1;
+        transform: none;
+    }
+
+    /* --- Pointer-tracked specular ---------------------------------------
+       A real highlight that follows the cursor across the metal, rather than
+       a sweep on a timer. --mx/--my are written by usePointerSpecular; the
+       fallback centre keeps it sane before first move and on touch. */
+    .specular-pointer::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        border-radius: inherit;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.4s var(--u-ease);
+        background: radial-gradient(
+            circle 22rem at var(--mx, 50%) var(--my, 0%),
+            color-mix(in srgb, var(--u-metal-sheen) 22%, transparent),
+            transparent 62%
+        );
+    }
+
+    .specular-pointer:hover::after {
+        opacity: 1;
+    }
+
+    /* Keep real content above the highlight layer. */
+    .specular-pointer > * {
+        position: relative;
+        z-index: 2;
+    }
+
+    /* --- Image treatment -------------------------------------------------- */
+    .img-zoom {
+        transition: transform 0.9s var(--u-ease);
+        will-change: transform;
+    }
+
+    .group:hover .img-zoom {
+        transform: scale(1.06);
+    }
+
+    .font-display {
+        font-family: 'Instrument Serif', 'Iowan Old Style', Georgia, serif;
+        font-weight: 400;
+        letter-spacing: -0.015em;
+    }
+
+    /* --- 1. Atmosphere -------------------------------------------------------- */
+    .u-halo {
+        position: absolute;
+        inset: 0;
+        background-image: var(--u-halo);
+        pointer-events: none;
+    }
+
+    /* --- 2. Anisotropic brush ------------------------------------------------
+   Fine directional grain. The difference between "grey" and "brushed steel". */
+    .grain::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        pointer-events: none;
+        opacity: 0.5;
+        background-image: repeating-linear-gradient(
+            var(--u-grain-angle),
+            rgb(255 255 255 / 0.035) 0px,
+            rgb(255 255 255 / 0.035) 1px,
+            transparent 1px,
+            transparent 3px,
+            rgb(0 0 0 / 0.03) 3px,
+            rgb(0 0 0 / 0.03) 4px,
+            transparent 4px,
+            transparent 7px
+        );
+    }
+
+    /* --- 3. Metal panel ------------------------------------------------------
+   Specular surface + chromatic edge + weighted elevation. */
+    .metal {
+        position: relative;
+        isolation: isolate;
+        border-radius: var(--u-r);
+        border: 1px solid var(--u-border);
+        background-image:
+            linear-gradient(180deg, color-mix(in srgb, var(--u-metal-sheen) 7%, transparent) 0%, transparent 42%),
+            linear-gradient(160deg, var(--u-surface-2) 0%, var(--u-surface-1) 55%, var(--u-bg-deep) 100%);
+        box-shadow:
+            inset 0 1px 0 color-mix(in srgb, var(--u-metal-sheen) 22%, transparent),
+            inset 0 -1px 0 color-mix(in srgb, var(--u-metal-shadow) 45%, transparent),
+            0 1px 2px color-mix(in srgb, var(--u-metal-shadow) 40%, transparent),
+            0 12px 28px -14px color-mix(in srgb, var(--u-metal-shadow) 75%, transparent);
+        overflow: hidden;
+    }
+
+    /* Chromatic edge — the universe's metal reads primarily through this rim. */
+    .metal-edge::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        padding: 1px;
+        pointer-events: none;
+        background: linear-gradient(
+            145deg,
+            color-mix(in srgb, var(--u-metal-edge) 85%, transparent),
+            transparent 38%,
+            transparent 62%,
+            color-mix(in srgb, var(--u-metal-edge) 45%, transparent)
+        );
+        mask:
+            linear-gradient(#000 0 0) content-box,
+            linear-gradient(#000 0 0);
+        mask-composite: exclude;
+        -webkit-mask:
+            linear-gradient(#000 0 0) content-box,
+            linear-gradient(#000 0 0);
+        -webkit-mask-composite: xor;
+    }
+
+    /* --- 4. Frost overlay ----------------------------------------------------- */
+    .frost {
+        background-color: color-mix(in srgb, var(--u-surface-1) 72%, transparent);
+        backdrop-filter: blur(16px) saturate(140%);
+        -webkit-backdrop-filter: blur(16px) saturate(140%);
+        border-bottom: 1px solid color-mix(in srgb, var(--u-border) 80%, transparent);
+    }
+
+    /* --- 5. Specular sweep ---------------------------------------------------
+   A slow highlight travelling across raised surfaces on hover. Motion-gated. */
+    .specular {
+        position: relative;
+        overflow: hidden;
+    }
+
+    .specular > .specular-sweep {
+        position: absolute;
+        inset: -40% -120%;
+        pointer-events: none;
+        opacity: 0;
+        background: linear-gradient(105deg, transparent 38%, color-mix(in srgb, var(--u-metal-sheen) 26%, transparent) 50%, transparent 62%);
+        transform: translateX(-45%);
+        transition:
+            opacity 0.35s var(--u-ease),
+            transform 0.85s var(--u-ease);
+    }
+
+    .specular:hover > .specular-sweep {
+        opacity: 1;
+        transform: translateX(45%);
+    }
+
+    /* --- 6. Interactive surfaces ---------------------------------------------- */
+    .lift {
+        transition:
+            transform 0.35s var(--u-ease),
+            box-shadow 0.35s var(--u-ease),
+            border-color 0.35s var(--u-ease);
+    }
+
+    .lift:hover {
+        transform: translateY(-3px);
+        border-color: color-mix(in srgb, var(--u-metal-edge) 70%, var(--u-border));
+        box-shadow:
+            inset 0 1px 0 color-mix(in srgb, var(--u-metal-sheen) 30%, transparent),
+            0 2px 4px color-mix(in srgb, var(--u-metal-shadow) 45%, transparent),
+            0 22px 44px -18px color-mix(in srgb, var(--u-metal-shadow) 85%, transparent);
+    }
+
+    .u-btn {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        border-radius: var(--u-r-sm);
+        padding: 0.6rem 1.1rem;
+        font-size: 0.875rem;
+        font-weight: 550;
+        line-height: 1;
+        white-space: nowrap;
+        cursor: pointer;
+        transition:
+            transform 0.2s var(--u-ease),
+            filter 0.2s var(--u-ease),
+            background-color 0.2s var(--u-ease);
+    }
+
+    .u-btn:active {
+        transform: translateY(1px);
+    }
+
+    .u-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .u-btn-primary {
+        color: var(--u-accent-fg);
+        background-image: linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--u-accent) 88%, white) 0%,
+            var(--u-accent) 55%,
+            color-mix(in srgb, var(--u-accent) 86%, black) 100%
+        );
+        box-shadow:
+            inset 0 1px 0 rgb(255 255 255 / 0.32),
+            0 1px 2px color-mix(in srgb, var(--u-metal-shadow) 50%, transparent),
+            0 10px 22px -12px var(--u-glow);
+    }
+
+    .u-btn-primary:hover:not(:disabled) {
+        filter: brightness(1.07);
+    }
+
+    .u-btn-ghost {
+        color: var(--u-text);
+        border: 1px solid var(--u-border);
+        background-color: color-mix(in srgb, var(--u-surface-2) 60%, transparent);
+    }
+
+    .u-btn-ghost:hover:not(:disabled) {
+        border-color: var(--u-metal-edge);
+        background-color: var(--u-surface-2);
+    }
+
+    /* --- 7. Form controls ----------------------------------------------------- */
+    .u-field {
+        width: 100%;
+        border-radius: var(--u-r-sm);
+        border: 1px solid var(--u-border);
+        background-color: color-mix(in srgb, var(--u-bg-deep) 55%, var(--u-surface-1));
+        color: var(--u-text);
+        padding: 0.65rem 0.85rem;
+        font-size: 0.9375rem;
+        transition:
+            border-color 0.2s var(--u-ease),
+            box-shadow 0.2s var(--u-ease);
+    }
+
+    .u-field::placeholder {
+        color: color-mix(in srgb, var(--u-text-muted) 75%, transparent);
+    }
+
+    .u-field:focus {
+        outline: none;
+        border-color: var(--u-accent);
+        box-shadow: 0 0 0 3px var(--u-accent-soft);
+    }
+
+    /* Focus ring for everything else — visible in all six palettes. */
+    :where(a, button, [role='button'], input, textarea, select):focus-visible {
+        outline: 2px solid var(--u-accent);
+        outline-offset: 2px;
+    }
+
+    /* Range inputs, themed. The browser default is grey on grey and
+       disappears entirely in the light universes. */
+    .u-range {
+        appearance: none;
+        height: 4px;
+        border-radius: 999px;
+        background: linear-gradient(
+            to right,
+            var(--u-accent) 0%,
+            var(--u-accent) var(--fill, 50%),
+            var(--u-border) var(--fill, 50%),
+            var(--u-border) 100%
+        );
+        background-color: var(--u-border);
+        cursor: pointer;
+    }
+
+    .u-range::-webkit-slider-thumb {
+        appearance: none;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: var(--u-accent);
+        border: 3px solid var(--u-bg);
+        box-shadow: 0 1px 6px color-mix(in srgb, var(--u-metal-shadow) 60%, transparent);
+        cursor: grab;
+    }
+
+    .u-range::-moz-range-thumb {
+        width: 18px;
+        height: 18px;
+        border: 3px solid var(--u-bg);
+        border-radius: 50%;
+        background: var(--u-accent);
+        cursor: grab;
+    }
+
+    /* --- 8. Reading view -----------------------------------------------------
+   Texture belongs on chrome and navigation, never behind body text. */
+    /* Reading view typography is reader-controlled. These four custom
+       properties are written by <UniverseRoot> from the user's saved
+       preferences; the values below are only fallbacks for guests. */
+    .prose-u {
+        color: var(--u-text);
+        font-family: var(--u-read-font, 'Literata', Georgia, serif);
+        font-size: var(--u-read-size, 19px);
+        line-height: var(--u-read-leading, 1.75);
+        /* Measure in characters, not pixels: line length should track the
+           chosen size, which a fixed max-width cannot do. */
+        max-width: var(--u-read-measure, 68ch);
+        margin-inline: auto;
+        /* Old-style figures and proper kerning make long prose settle down. */
+        font-variant-numeric: oldstyle-nums proportional-nums;
+        text-rendering: optimizeLegibility;
+    }
+
+    .prose-u > * + * {
+        margin-top: 1.35em;
+    }
+
+    .prose-u h2,
+    .prose-u h3,
+    .prose-u h4 {
+        font-family: 'Instrument Serif', Georgia, serif;
+        line-height: 1.25;
+        margin-top: 2em;
+        letter-spacing: -0.015em;
+    }
+
+    .prose-u h2 {
+        font-size: 1.75rem;
+    }
+
+    .prose-u h3 {
+        font-size: 1.4rem;
+    }
+
+    .prose-u a {
+        color: var(--u-accent);
+        text-decoration: underline;
+        text-underline-offset: 3px;
+    }
+
+    .prose-u blockquote {
+        border-left: 2px solid var(--u-metal-edge);
+        padding-left: 1.15rem;
+        font-style: italic;
+        color: var(--u-text-muted);
+    }
+
+    .prose-u code {
+        font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+        font-size: 0.875em;
+        background-color: var(--u-surface-2);
+        border: 1px solid var(--u-border);
+        border-radius: 5px;
+        padding: 0.1em 0.35em;
+    }
+
+    .prose-u pre {
+        background-color: var(--u-bg-deep);
+        border: 1px solid var(--u-border);
+        border-radius: var(--u-r-sm);
+        padding: 1rem 1.15rem;
+        overflow-x: auto;
+    }
+
+    .prose-u pre code {
+        background: none;
+        border: none;
+        padding: 0;
+    }
+
+    .prose-u ul,
+    .prose-u ol {
+        padding-left: 1.4rem;
+    }
+
+    .prose-u ul {
+        list-style: disc;
+    }
+
+    .prose-u ol {
+        list-style: decimal;
+    }
+
+    .prose-u li + li {
+        margin-top: 0.4em;
+    }
+
+    .prose-u hr {
+        border: none;
+        border-top: 1px solid var(--u-border);
+    }
+
+    /* --- Marked passages -------------------------------------------------
+       The visual core of the product: a marked sentence should read as
+       *underlined by other people*, not as a highlighter pen through it.
+       Colour behind body text hurts legibility and looks like a search hit;
+       a weighted underline carries the same information and stays readable. */
+    .u-mark {
+        color: inherit;
+        background: none;
+        border-radius: 2px;
+        box-shadow: inset 0 -0.42em 0 color-mix(in srgb, var(--u-accent) 12%, transparent);
+        border-bottom: 2px solid color-mix(in srgb, var(--u-accent) 45%, transparent);
+        transition:
+            box-shadow 0.25s var(--u-ease),
+            border-color 0.25s var(--u-ease);
+    }
+
+    .u-mark:hover {
+        box-shadow: inset 0 -0.42em 0 color-mix(in srgb, var(--u-accent) 20%, transparent);
+        border-bottom-color: var(--u-accent);
+    }
+
+    /* Your own mark is stronger, and clickable to remove. */
+    .u-mark.is-mine {
+        border-bottom-color: var(--u-accent);
+        box-shadow: inset 0 -0.42em 0 color-mix(in srgb, var(--u-accent) 22%, transparent);
+        cursor: pointer;
+    }
+
+    /* Selection colour has to work on six backgrounds, so it is a token too. */
+    ::selection {
+        background-color: color-mix(in srgb, var(--u-accent) 30%, transparent);
+        color: var(--u-text);
+    }
+
+    /* --- 9. Editor ------------------------------------------------------------ */
+    .tiptap {
+        outline: none;
+        min-height: 26rem;
+    }
+
+    .tiptap p.is-editor-empty:first-child::before {
+        content: attr(data-placeholder);
+        float: left;
+        height: 0;
+        pointer-events: none;
+        color: color-mix(in srgb, var(--u-text-muted) 70%, transparent);
+    }
+}
+
+/* --- 10. Motion ----------------------------------------------------------
+   Metallic sheen and drift are the most likely thing here to trigger
+   vestibular discomfort, so every one of them is gated. */
+@keyframes u-drift {
+    0%,
+    100% {
+        transform: translate3d(0, 0, 0) scale(1);
+    }
+    50% {
+        transform: translate3d(0, -16px, 0) scale(1.04);
+    }
+}
+
+@keyframes u-rise {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+.u-drift {
+    animation: u-drift 18s ease-in-out infinite;
+}
+
+.u-rise {
+    animation: u-rise 0.6s var(--u-ease) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .u-drift,
+    .u-rise {
+        animation: none !important;
+    }
+
+    /* Reveal must resolve to visible, not stay stuck transparent. */
+    .u-reveal {
+        opacity: 1 !important;
+        transform: none !important;
+        transition: none !important;
+    }
+
+    .specular-pointer::after {
+        display: none;
+    }
+
+    .img-zoom,
+    .group:hover .img-zoom {
+        transform: none !important;
+    }
+
+    .lift:hover {
+        transform: none;
+    }
+
+    .specular > .specular-sweep {
+        display: none;
+    }
+
+    *,
+    *::before,
+    *::after {
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* Scrollbar, tuned per universe rather than left as browser chrome. */
+::-webkit-scrollbar {
+    width: 11px;
+    height: 11px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--u-bg-deep);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--u-metal-base);
+    border: 2px solid var(--u-bg-deep);
+    border-radius: 8px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--u-metal-edge);
+}
