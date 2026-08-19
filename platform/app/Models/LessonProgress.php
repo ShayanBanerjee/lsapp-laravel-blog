@@ -9,7 +9,7 @@ class LessonProgress extends Model
 {
     protected $table = 'lesson_progress';
 
-    protected $fillable = ['user_id', 'post_id', 'completed_at'];
+    protected $fillable = ['user_id', 'post_id', 'course_id', 'completed_at'];
 
     protected function casts(): array
     {
@@ -24,5 +24,10 @@ class LessonProgress extends Model
     public function lesson(): BelongsTo
     {
         return $this->belongsTo(Post::class, 'post_id');
+    }
+
+    public function course(): BelongsTo
+    {
+        return $this->belongsTo(Course::class);
     }
 }

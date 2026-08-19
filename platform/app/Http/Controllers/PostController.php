@@ -2,20 +2,25 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\FingerprintPost;
 use App\Models\Post;
 use App\Models\Prompt;
 use App\Models\Response as ModelsResponse;
+use App\Support\Academic\Zenodo;
 use App\Support\Ads;
-use App\Support\CopyDetection;
+use App\Support\Earnings\SupportConfig;
 use App\Support\HtmlSanitizer;
+use App\Support\Integrations\IntegrationRegistry;
 use App\Support\PostPresenter;
 use App\Support\Seo;
+use App\Support\StoryBlocks;
 use App\Support\UniverseContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -45,29 +50,16 @@ class PostController extends Controller
                 'q' => $request->query('q'),
             ],
             'ads' => Ads::forRequest($request, 'feed'),
-        ])->withViewData(['seo' => Seo::forPage(
-            'Read',
-            'Everything published across all six worlds — marked, quoted and answered passage by passage.',
-            route('posts.index'),
-        )]);
+        ]);
     }
 
-    public function show(Request $request, Post $post): Response|RedirectResponse
+    public function show(Request $request, Post $post): Response
     {
         $this->authorize('view', $post);
 
-        /*
-         * A lesson is a post, so it is reachable at /posts/{slug} — but read
-         * there it arrives with no course, no contents panel and no sense of
-         * where it sits in the sequence. Send it home, and keep one canonical
-         * URL per lesson while we are at it.
-         */
-        if ($post->isLesson() && $post->courseModule?->course) {
-            return redirect()->route('courses.lesson', [$post->courseModule->course, $post], 301);
-        }
-
         $user = $request->user();
-        $post->load(['persona.universe', 'universe', 'user', 'categories'])->loadCount('highlights');
+        $post->load(['persona.universe', 'persona.customTheme', 'persona.user', 'universe', 'user', 'categories'])
+            ->loadCount('highlights');
 
         $related = Post::published()
             ->where('universe_id', $post->universe_id)
@@ -100,14 +92,16 @@ class PostController extends Controller
         return Inertia::render('posts/show', [
             'post' => [
                 ...PostPresenter::card($post),
-                'body' => $post->body,
+                // Storytelling blocks are stored compact and expanded here —
+                // see StoryBlocks for why the split exists.
+                'body' => StoryBlocks::expand($post->body),
                 'can' => [
                     'update' => $user?->can('update', $post) ?? false,
                     'delete' => $user?->can('delete', $post) ?? false,
                 ],
             ],
             // A post is always read in its own world.
-            'universe' => UniverseContext::serialize($post->universe, $user),
+            'universe' => UniverseContext::serialize($post->universe, $user, $post->persona),
             'related' => $related,
 
             // Passages marked by anyone, collapsed to one row per passage with
@@ -142,6 +136,24 @@ class PostController extends Controller
                 ]
                 : ['saved' => false, 'starred' => false],
 
+            // Taking the piece elsewhere: citation and Markdown for anyone,
+            // manuscript formats for the author.
+            'exports' => ExportController::optionsFor($post, $user?->can('update', $post) ?? false),
+            // Destinations this author has actually connected — an offer to
+            // cross-post somewhere they have not set up is just a dead button.
+            'crosspost' => $user?->can('update', $post)
+                ? app(IntegrationRegistry::class)->destinations()
+                    ->only($user->integrations()->pluck('provider')->all())
+                    ->map(fn ($provider) => ['key' => $provider->key(), 'label' => $provider->label()])
+                    ->values()
+                : [],
+            'canDeposit' => ($user?->can('update', $post) ?? false) && Zenodo::isConfigured() && $post->isPublished(),
+            'canStudio' => $user?->can('update', $post) ?? false,
+
+            // Paying the writer directly. Built server-side because two of
+            // these facts are authorisation decisions.
+            'support' => SupportConfig::for($user, $post->persona, $post->user_id),
+
             'ads' => Ads::forRequest($request, 'post'),
             'seo' => $seo,
         ])
@@ -158,6 +170,7 @@ class PostController extends Controller
 
         return Inertia::render('posts/create', [
             'personas' => $this->writablePersonas($request),
+            'canPublish' => $request->user()->canPublish(),
             'prompts' => $universe
                 ? Prompt::where('universe_id', $universe->id)->inRandomOrder()->limit(3)->pluck('body')
                 : collect(),
@@ -167,6 +180,7 @@ class PostController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $data = $this->validatePost($request);
+        $this->guardPublishing($request, $data['status']);
         $persona = $request->user()->personas()->with('universe')->findOrFail($data['persona_id']);
 
         $this->authorize('use', $persona->universe);
@@ -187,8 +201,9 @@ class PostController extends Controller
             'published_at' => $data['status'] === 'published' ? now() : null,
         ]);
 
-        return to_route('posts.show', $post)
-            ->with('success', $this->afterPublish($post) ?? 'Your piece is live.');
+        FingerprintPost::dispatch($post->id);
+
+        return to_route('posts.show', $post)->with('success', 'Your piece is live.');
     }
 
     public function edit(Request $request, Post $post): Response
@@ -202,6 +217,7 @@ class PostController extends Controller
                 'persona_id' => $post->persona_id,
             ],
             'personas' => $this->writablePersonas($request),
+            'canPublish' => $request->user()->canPublish(),
         ]);
     }
 
@@ -210,6 +226,7 @@ class PostController extends Controller
         $this->authorize('update', $post);
 
         $data = $this->validatePost($request);
+        $this->guardPublishing($request, $data['status']);
         $persona = $request->user()->personas()->with('universe')->findOrFail($data['persona_id']);
 
         $this->authorize('use', $persona->universe);
@@ -237,33 +254,11 @@ class PostController extends Controller
                 : null,
         ]);
 
-        return to_route('posts.show', $post)
-            ->with('success', $this->afterPublish($post) ?? 'Changes saved.');
-    }
+        // Re-run on every edit: the body that was indexed is no longer the
+        // body that is published.
+        FingerprintPost::dispatch($post->id);
 
-    /**
-     * Fingerprint a published piece and tell the author if it closely matches
-     * something already here.
-     *
-     * Told to the *author*, not enforced against them. A near-duplicate has
-     * legitimate explanations — reposting your own work, quoting a primary
-     * document — so this surfaces a fact and leaves the judgement to a human.
-     * Drafts are skipped: nothing unpublished can have been copied *from*.
-     */
-    private function afterPublish(Post $post): ?string
-    {
-        if (! $post->isPublished()) {
-            return null;
-        }
-
-        $flags = CopyDetection::check($post);
-
-        if ($flags->isEmpty()) {
-            return null;
-        }
-
-        return 'Published. Note: this closely matches '.$flags->count().' piece(s) already here — '
-            .'up to '.$flags->max('containment').'% of it appears in one of them. Flagged for review.';
+        return to_route('posts.show', $post)->with('success', 'Changes saved.');
     }
 
     public function destroy(Request $request, Post $post): RedirectResponse
@@ -289,6 +284,22 @@ class PostController extends Controller
             'status' => ['required', 'in:draft,published'],
             'cover_image' => ['nullable', 'image', 'max:4096'],
         ]);
+    }
+
+    /**
+     * Nothing reaches a public URL from an address nobody proved they own.
+     *
+     * Reported as a validation error on `status` rather than a 403 so the
+     * editor keeps the draft on screen — losing someone's unsaved prose to
+     * teach them about email confirmation would be the wrong trade.
+     */
+    private function guardPublishing(Request $request, string $status): void
+    {
+        if ($status === 'published' && ! $request->user()->canPublish()) {
+            throw ValidationException::withMessages([
+                'status' => 'Confirm your email address before publishing. Your draft is safe — we can send the link again.',
+            ]);
+        }
     }
 
     /**

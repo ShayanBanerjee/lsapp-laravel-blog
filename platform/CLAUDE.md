@@ -16,13 +16,6 @@ composer run dev
 
 That one command runs the server, queue listener, log tailer and Vite together — it is the normal way to work. Individually: `php artisan serve`, `npm run dev`.
 
-To work with server-side rendering on (builds the SSR bundle, then runs the Node
-renderer alongside the server):
-
-```bash
-composer run dev:ssr
-```
-
 ```bash
 php artisan test
 ```
@@ -34,6 +27,14 @@ Reset to a known state (drops everything, re-seeds the six universes and demo co
 ```bash
 php artisan migrate:fresh --seed
 ```
+
+Server-side rendering is enabled. To run the app with it:
+
+```bash
+composer run dev:ssr
+```
+
+That builds the SSR bundle and runs `php artisan inertia:start-ssr` alongside the server. Plain `composer run dev` skips SSR and client-renders, which is fine for most work — but anything touching a **page or layout** should be checked under SSR, because reading `window` at render time takes the SSR process down for every page and Inertia silently falls back to client rendering rather than erroring.
 
 Formatting and static checks — run these before finishing: `./vendor/bin/pint` (PHP), `npm run lint` (ESLint, autofixes), `npm run format` (Prettier), `npx tsc --noEmit` (types).
 
@@ -96,95 +97,6 @@ The product thesis in one line: **the passage is the atom, and writers quit beca
 - **Universes are cached** (`Universe::cachedAll()`), invalidated by model events. They are read on every request and written approximately never.
 - **SQLite is configured for concurrency**: WAL journal mode plus a 5s busy timeout. The Laravel defaults (no WAL, zero timeout) make any two simultaneous writes fail with "database is locked". Verified with 8 parallel processes × 25 writes: zero failures. *This makes SQLite viable for dev and small deployments — it is still not the right production database. Use Postgres at real concurrency.*
 
-### Server-side rendering
-
-`resources/js/ssr.jsx` → `bootstrap/ssr/ssr.js`, run by `php artisan inertia:start-ssr`. Build it with `npm run build:ssr`; `composer run dev:ssr` does both and runs it alongside the server.
-
-**The failure mode is silence.** When the SSR process throws, Inertia catches it and falls back to client rendering: the page still returns 200 and looks perfect in a browser, while every scraper sees an empty shell. Never conclude SSR works because the site looks right — read the SSR process output, or check that `<div id="app">` has rendered children. `SsrTest` guards the parts that can be asserted from PHP.
-
-Three things break it, all of which have already bitten:
-
-- **Browser globals at module scope.** The SSR bundle imports every page eagerly, so a `window.matchMedia(...)` in a module body crashes the process at import time, before any render. Guard with `typeof window === 'undefined'` and resolve lazily — see `hooks/use-appearance.tsx` and `hooks/use-motion.ts`.
-- **`route()` is not global in Node.** The browser gets it from the `@routes` directive; the SSR process does not. `ssr.jsx` sets `globalThis.Ziggy` and `globalThis.route` from the `ziggy` shared prop, which `HandleInertiaRequests` sends **on full page loads only** — Inertia navigations render in the browser where the global already exists, so re-sending several KB of route table would buy nothing. `vite.config.js` aliases `ziggy-js` to the composer package, which is where that client actually ships.
-- **Duplicate head tags.** `@inertiaHead` is deliberately absent from `app.blade.php`. With SSR on it emits a second `<title>` and `<meta name="description">` from each page's `<Head>`, competing with the server-rendered ones. The Blade tags win because they are the only ones that survive the SSR process being down.
-
-### Tutorials
-
-`courses` → `course_modules` → lessons, where **a lesson is a row in `posts`** (`kind = 'lesson'`, plus `course_module_id` and `sort_order`).
-
-That is the load-bearing decision. Lessons are not a parallel content type, so highlights, responses, letters, bookmarks, reading typography and the sanitiser all apply to them with no polymorphic second case anywhere. A lesson that could not be marked would be a worse lesson.
-
-`Post::scopePublished()` excludes lessons, which is why no existing listing needed touching — feed, sitemap, RSS, universe, subject, circle and home all go through that one scope, so a lesson cannot appear stranded out of its course. Course pages ask for lessons explicitly via `scopePublishedLessons()`. `/posts/{slug}` 301s a lesson into its course.
-
-`CourseController::outline()` builds the contents panel in three queries regardless of course size; `QueryBudgetTest` asserts it does not grow.
-
-### Storytelling blocks
-
-Four TipTap nodes — pinned image, step sequence, before/after, data callout — stored as `<figure data-story="…">` with plain block content inside.
-
-**Nothing about the behaviour lives in the markup.** The static CSS stands alone, so a block is completely readable server-rendered, in an RSS reader, and under reduced motion; `hooks/use-story-blocks.ts` layers the scroll behaviour on afterwards as an enhancement. That is also why it is progressive enhancement rather than React islands: `Readable` replaces `innerHTML` wholesale on every mark, so anything React mounted inside would be destroyed the moment a reader marks a passage. The hook re-attaches after every repaint.
-
-Steps start at `opacity: 0`, so they carry a 3s failsafe that settles them regardless — same belt-and-braces as `.u-reveal` being forced visible in CSS. A tab never brought to the foreground does not fire IntersectionObserver, and stranded invisible prose is far worse than an un-animated reveal.
-
-`HtmlSanitizer` now keeps a **strict per-tag attribute allowlist** (`ALLOWED_ATTRIBUTES`) with a validator per attribute value — `data-story` must be one of four literals, `src` must be https or root-relative (no `data:`, which is an SVG-script vector). Tags are rebuilt from scratch rather than filtered, so a duplicated or malformed attribute cannot survive in the part of the string we did not rewrite. Never add `style` or anything matching `on*`.
-
-### Integrations and export
-
-- **Markdown + YAML frontmatter** is the whole Obsidian integration, and that is not a compromise: a vault is a folder of files on someone's disk, so a file in their format *is* the integration. Works for everyone with no account anywhere.
-- **Readwise** maps exactly — their unit is a highlight with a source, and so is ours. Needs the reader's own token.
-- **LaTeX/DOCX** are the honest version of "submit to IEEE". `ManuscriptExporter::inlineToTex()` tokenises formatting *before* escaping; escaping first and un-escaping after does not work, because `escapeTex` also escapes the braces of the commands you just inserted.
-- **Zenodo** creates a **draft** and stops. Publishing mints a permanent DOI and is irreversible, so the last step stays a human decision on their page.
-- **Crossref** needs no credentials at all.
-
-Tokens live in `integrations.token`, `encrypted` cast and `$hidden`, so a leaked backup does not hand over live write access to someone's third-party account, and the credential cannot be serialized into an Inertia page by accident. `IntegrationTest` asserts both.
-
-### Copy detection
-
-Shingle **containment** — overlapping four-word runs, measured as "how much of the smaller piece appears in the larger". Run on publish only; drafts cannot have been copied *from*.
-
-SimHash was built first and rejected on measurement (numbers in the `post_fingerprints` migration). Containment rather than Jaccard because Jaccard punishes a copy for being pasted into a longer piece — a lifted paragraph scores 0.26 by Jaccard and 0.55 by containment, and the second number describes what happened.
-
-The `post_shingles.shingle_hash` index is what makes this a lookup rather than a scan; without it, publishing gets slower with every piece ever written.
-
-**Scope, and say it plainly to users:** this detects copying *within the platform*. It cannot detect copying from the open web — that needs an index of the open web. Nothing is ever blocked or removed automatically; a flag is a prompt for a human, because near-identical pairs have legitimate explanations.
-
-### Writer social layer
-
-Built against STRATEGY.md's explicit exclusions, which matter more here than anywhere else:
-
-- **No public follower counts.** A profile shows published pieces and which sentences landed. `WriterSocialTest` asserts the *absence*, because absences regress silently.
-- **No infinite feed.** `/following` is chronological, unranked and paginated. Ranking would be a claim about what you should read next, and the reader sets the pace.
-- **Notifications carry the passage, never a tally.** `quote` is denormalised on `writer_notifications` so the writer keeps the specific praise even after the highlight is deleted. There is no "someone followed you" — that is standing, not feedback.
-
-### Theme editor and vanity handles
-
-Both were advertised on `/upgrade` and are now real.
-
-A custom theme is a set of token **overrides** over a base universe — the same shape a seeded universe has, which is why no component changed. Applied inside `UniverseContext::withCustomTheme()`, on the **entitled branch only**, beside the premium token sets: gating it in React would put the mechanism in the JS bundle. A lapsed subscription stops applying it, which is tested.
-
-Override values are validated to a strict hex pattern and re-filtered on read. They are interpolated into a `style` attribute as CSS custom properties, so an unvalidated value is a CSS injection — matching a pattern removes the class of problem rather than trying to escape it.
-
-Short handles (2–4 characters) are the paid tier; `App\Rules\VanityHandle::RESERVED` blocks impersonation and route collisions for **everyone**, premium or not. A test asserts every top-level route path is in that list, so it stays honest as routes are added.
-
-### Email verification
-
-`User` implements `MustVerifyEmail`, which is what makes the whole scaffolding
-live — without the contract, `Registered` sends nothing and the `verified`
-middleware passes everyone.
-
-The gate is **writing, not membership**. `verified` guards the editor, publish,
-update, responses and letters. It deliberately does *not* guard reading,
-marking, saving, following, or `posts.destroy` — marks are the core loop and
-gating them would cost real readers to inconvenience spammers who never read,
-and taking your own work down must never require clearing a hurdle first.
-
-`users:prune-unverified` (nightly, `auth.unverified_grace_days`, default 30)
-deletes abandoned signups. Eligibility lives in `User::scopeAbandonedUnverified`
-and excludes any account holding content of any kind, **and any account with a
-social identity** — Facebook does not assert a verified address, so a real
-person can sit at `email_verified_at = null` forever and must not be swept up.
-Use `--dry-run` before trusting a window change.
-
 ### Security
 
 - `HtmlSanitizer::clean()` — tag allowlist for post bodies (rich text, rendered with `dangerouslySetInnerHTML`).
@@ -231,8 +143,78 @@ Authorization is Policies (`PostPolicy`, `UniversePolicy`, `PersonaPolicy`), not
 - Custom component classes belong in `@layer components`. Unlayered CSS outranks every Tailwind utility, which silently breaks things like `md:hidden`.
 - Grid and flex children need `min-w-0` before `truncate` or `line-clamp` will actually shrink them; without it they refuse to go below their content width and blow the page out horizontally. `.u-root` carries `overflow-x: clip` as a backstop (`clip`, not `hidden`, so the sticky header survives) — but fix the real cause rather than relying on it.
 
+## Courses, and the one global scope
+
+**A lesson is a `Post`** with a `course_module_id`, not a row in a separate table. Lessons want everything writing already has here — marks, responses, letters, bookmarks, sanitisation, reading time, SEO — and a parallel table would mean reimplementing all of it and then keeping two implementations in step.
+
+The cost is that lessons must never appear where standalone writing is listed. That is handled by **`StandalonePostScope`**, a global scope on `Post` that hides them from every query by default. Reading lessons requires opting out explicitly:
+
+```php
+Post::withoutGlobalScope(StandalonePostScope::class)
+```
+
+`CourseModule::lessons()` and `Course::lessons()` already do, so ordinary course code never thinks about it. The default runs this way round on purpose: forgetting to *apply* a filter would publish something that should not be public, while forgetting to *remove* one merely hides something.
+
+`{readable}` is a route binding (registered in `AppServiceProvider`) that resolves any post, lesson or not. The interaction endpoints — highlights, responses, letters, bookmarks — use it so a lesson supports all four without a duplicate set of routes.
+
+## Storytelling blocks
+
+Stored as one `<figure data-story="…">` carrying **scalar attributes and no children**, and expanded into full markup at render time by `StoryBlocks::expand()`. That split is what makes rich blocks safe in a body rendered with `dangerouslySetInnerHTML`: the only thing ever validated on write is a fixed set of scalars, and the HTML a reader receives is generated from escaped values.
+
+`halo`-style free-form values are never accepted from the client — the author picks a named shape and the gradient is composed server-side.
+
+Expansion must stay **deterministic**. Marks are anchored by block index into the rendered body, so restructuring an existing block type would move every mark after it. Add new types; do not reshape old ones.
+
+## Two design systems, one bridge
+
+The product's own tokens (`--u-*`) and the starter kit's shadcn set both exist.
+They are reconciled in `app.css` by remapping the shadcn tokens onto universe
+tokens **inside `.u-root`**.
+
+The subtlety, which has its own test: Tailwind v4 declares
+`--color-background: var(--background)` at `:root`, and a custom property is
+substituted where it is *declared*, not where it is used. Redefining
+`--background` deeper in the tree therefore never reaches `bg-background` —
+only redefining `--color-background` does. Both families are set. Deleting the
+"duplicate" block reintroduces invisible text on every auth form.
+
+## Money
+
+Everything in `App\Support\Earnings`. Three rules, all enforced in code and asserted in tests:
+
+1. **No floats, anywhere.** Every amount is an integer in minor units with an explicit currency. `0.1 + 0.2 !== 0.3`, and a platform that computes a revenue share in floats will eventually owe someone a fraction of a penny it cannot account for.
+2. **`platformFee + writerNet === gross`, exactly.** `RevenueSplit` derives the writer's share by *subtraction* rather than a second multiplication, so the two halves cannot drift by a rounding unit. `RevenueSplitTest` asserts this exhaustively for every amount from 1p to £100.
+3. **Rounding favours the writer.** The fee floors; the spare penny goes to the person who wrote the thing.
+
+The platform pays card fees out of its own 25%, not off the top. That is what keeps a £1 tip worth making — see the class comment for the arithmetic.
+
+`Ledger` computes balances from the transaction rows rather than caching a running total on the user, and separates **lifetime / clearing / available** deliberately: paying out inside the chargeback window means reclaiming money from a writer who has already been told it is theirs.
+
+`Contributions::settle()` is idempotent. Processors retry webhooks; a second delivery must not pay twice. The `provider_ref` unique index is the hard guarantee.
+
+## The research studio
+
+`App\Support\Academic\Venues`. **Nothing here submits to a publisher, and nothing can** — IEEE, ACM, Springer Nature and Nature all receive manuscripts through editorial systems that publish no third-party submission API. The page says so, in those words.
+
+What it does is remove the day of reformatting: `SubmissionPackage` builds a zip containing the manuscript in the venue's own LaTeX class, a DOCX, BibTeX, the metadata their portal asks for field by field, a cover-letter draft with visible gaps, and a checklist.
+
+Two rules when adding a venue:
+
+- **The checklist is phrased as things to confirm, never as facts about current rules.** Author guidelines change, and a stale requirement stated confidently is worse than none. Every venue carries a live `guidelinesUrl` and the UI says the publisher's guide is authoritative.
+- **Never invent a field.** The corresponding-author email is left `null` in `metadata.json` rather than guessed, because a portal rejects a wrong one and an obvious gap is better than a plausible error.
+
+## Motion and the design system
+
+The display face is **Fraunces**, driven on its `SOFT`, `WONK` and `opsz` axes — `.font-display`, `.font-display-sm`, `.font-brand` in `app.css`. The axes are the identity; a static face at three sizes would look like every other publication.
+
+Buttons (`.u-btn`) do four things on interaction — lift, specular sweep, magnetic lean, press — all transform/opacity only, so they run on the compositor and never trigger layout. `useMagnetic` writes `--u-mx`/`--u-my`, coalesced to one write per frame. All four are neutralised under `prefers-reduced-motion`, where the button keeps its colours and loses its movement.
+
+**The Deep Field's zoom does not go through React.** `useDeepZoom` writes `transform` and `opacity` directly onto the layer elements in a rAF loop; React renders the stage once and is only told when the integer layer changes (~6 times for the whole descent). Rendering it from state reconciled the entire stage sixty times a second and was the reason it stuttered. Measured after the change: 16.7ms median frame, zero frames over 32ms across a full descent.
+
+Layers stay mounted for the whole descent and are hidden with `visibility` rather than unmounted — unmounting meant re-decoding a photograph at exactly the moment of transition, which is when a hitch is most visible.
+
 ## Known gaps
 
-- **Billing is a stub.** `UpgradeController::activate()` flips `users.is_premium` with no payment taken, and is disabled the moment `services.stripe.secret` is set. Real billing means Laravel Cashier plus a webhook writing `theme_entitlements` rows — the access-control code should not need to change.
-- The custom theme editor and vanity handles are advertised on `/upgrade` but not built.
-- Follows are recorded but there is no feed built from them yet.
+- **Billing is a stub.** `UpgradeController::activate()` flips `users.is_premium` with no payment taken, and is disabled the moment `services.stripe.secret` is set. Contributions settle inline in demo mode and say so. Real billing means Stripe Checkout for premium, Stripe Connect for payouts, and a webhook calling the existing `Contributions::settle()` — the ledger, split, hold period and payout threshold are already built and tested.
+- **Copy detection is platform-local.** `LocalCopyDetector` compares against everything published here and nothing else. Web-wide detection needs a third-party index; `CopyDetector` is an interface bound in the container for exactly that swap.
+- **No staff role.** Moderation flags and copy flags are recorded and the author can dismiss flags on their own work, but there is no reviewer-facing queue.

@@ -1,10 +1,12 @@
 import { AdSlot, type Ad } from '@/components/ad-slot';
+import { ExportMenu, type CrosspostTarget, type ExportOption } from '@/components/export-menu';
 import { Chip, Panel, Rail, SectionHeading, Swatch } from '@/components/metal';
 import { PostCard } from '@/components/post-card';
 import { Readable, type OwnHighlight, type Passage, type SelectionAnchor } from '@/components/readable';
 import { Reveal } from '@/components/reveal';
 import { SeoHead, type SeoPayload } from '@/components/seo-head';
 import { ShareMenu } from '@/components/share-menu';
+import { SupportWidget, type SupportConfig } from '@/components/support-widget';
 import SiteLayout from '@/layouts/site-layout';
 import type { PostCard as PostCardData, SharedData, Universe } from '@/types';
 import { Link, router, useForm, usePage } from '@inertiajs/react';
@@ -32,9 +34,29 @@ interface Props {
     bookmarks: { saved: boolean; starred: boolean };
     seo: SeoPayload;
     ads: Ad[];
+    exports: ExportOption[];
+    canDeposit: boolean;
+    crosspost: CrosspostTarget[];
+    canStudio: boolean;
+    support: SupportConfig;
 }
 
-export default function PostShow({ post, universe, related, passages, myHighlights, responses, bookmarks, seo, ads }: Props) {
+export default function PostShow({
+    post,
+    universe,
+    related,
+    passages,
+    myHighlights,
+    responses,
+    bookmarks,
+    seo,
+    ads,
+    exports = [],
+    canDeposit = false,
+    crosspost = [],
+    canStudio = false,
+    support,
+}: Props) {
     const { auth } = usePage<SharedData>().props;
     const signedIn = Boolean(auth.user);
 
@@ -94,7 +116,10 @@ export default function PostShow({ post, universe, related, passages, myHighligh
                     <div className="mt-7 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm" style={{ color: 'var(--u-text-muted)' }}>
                         {post.persona && (
                             <span>
-                                by <span style={{ color: 'var(--u-text)' }}>{post.persona.display_name}</span> @{post.persona.handle}
+                                by{' '}
+                                <Link href={`/@${post.persona.handle}`} className="hover:underline">
+                                    <span style={{ color: 'var(--u-text)' }}>{post.persona.display_name}</span> @{post.persona.handle}
+                                </Link>
                             </span>
                         )}
                         {post.published_human && (
@@ -195,6 +220,15 @@ export default function PostShow({ post, universe, related, passages, myHighligh
 
                 <Readable html={post.body} passages={passages} own={myHighlights} canMark={signedIn} onMark={mark} onUnmark={unmark} />
             </article>
+
+            {/* Paying the writer sits directly under the piece it answers. */}
+            <section className="mx-auto mt-16 max-w-2xl">
+                <SupportWidget config={support} slug={post.slug} />
+            </section>
+
+            <section className="mx-auto mt-8 max-w-2xl">
+                <ExportMenu exports={exports} canDeposit={canDeposit} crosspost={crosspost} canStudio={canStudio} slug={post.slug} />
+            </section>
 
             {passages.length > 0 && (
                 <section className="mx-auto mt-16 max-w-2xl">

@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Support\HtmlSanitizer;
+use App\Support\StoryBlocks;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -105,7 +106,10 @@ class HtmlSanitizerTest extends TestCase
 
     public function test_it_keeps_known_storytelling_block_kinds(): void
     {
-        foreach (['pinned', 'steps', 'before-after', 'callout'] as $kind) {
+        // The vocabulary is StoryBlocks::SCHEMA — read from it rather than
+        // repeating it, so adding a block type cannot leave this test asserting
+        // a set that no longer exists.
+        foreach (array_keys(StoryBlocks::SCHEMA) as $kind) {
             $clean = HtmlSanitizer::clean('<figure data-story="'.$kind.'"><p>Body</p></figure>');
 
             $this->assertStringContainsString('data-story="'.$kind.'"', $clean, $kind);
@@ -122,7 +126,12 @@ class HtmlSanitizerTest extends TestCase
         $clean = HtmlSanitizer::clean('<figure data-story="../../etc"><p>Body</p></figure>');
 
         $this->assertStringNotContainsString('data-story=', $clean);
-        $this->assertStringContainsString('<figure>', $clean);
+
+        // The whole element goes, not just the attribute: a block's content
+        // lives in its attributes, so a figure with an unrecognised type has
+        // nothing left to render and an empty <figure> would be a stray hole
+        // in the prose.
+        $this->assertStringNotContainsString('<figure', $clean);
     }
 
     public function test_it_drops_style_and_unlisted_attributes_from_storytelling_blocks(): void

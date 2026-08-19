@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 750" width="1200" height="750" role="img" aria-label="Abstract machine-room diagram">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0a1017"/><stop offset="100%" stop-color="#03060a"/>
+    </linearGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#3ddbd9" stroke-opacity="0.05" stroke-width="1"/>
+    </pattern>
+    <filter id="gl" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="3" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="1200" height="750" fill="url(#g)"/>
+  <rect width="1200" height="750" fill="url(#grid)"/>
+
+  <g stroke="#1e2c37" stroke-width="1">
+    <path d="M150 120 V650 M330 120 V650 M510 120 V650 M690 120 V650 M870 120 V650 M1050 120 V650"/>
+  </g>
+  <g rx="4">
+    <rect x="150" y="170" width="176" height="26" rx="4" fill="#3ddbd9" fill-opacity="0.85"/>
+    <rect x="326" y="238" width="212" height="26" rx="4" fill="#3ddbd9" fill-opacity="0.62"/>
+    <rect x="538" y="306" width="168" height="26" rx="4" fill="#3ddbd9" fill-opacity="0.48"/>
+    <rect x="706" y="374" width="242" height="26" rx="4" fill="#3ddbd9" fill-opacity="0.36"/>
+    <rect x="948" y="442" width="120" height="26" rx="4" fill="#e8734a" fill-opacity="0.72"/>
+  </g>
+  <g fill="none" stroke="#3ddbd9" stroke-opacity="0.28" stroke-width="1.2" stroke-dasharray="3 5">
+    <path d="M326 196 V238 M538 264 V306 M706 332 V374 M948 400 V442"/>
+  </g>
+  <g fill="#93aab8" font-family="ui-monospace,monospace" font-size="15" letter-spacing="1.5" fill-opacity="0.62">
+    <text x="150" y="158">auth</text><text x="326" y="226">user</text>
+    <text x="538" y="294">prefs</text><text x="706" y="362">content</text>
+    <text x="948" y="430">render</text>
+  </g>
+  <g filter="url(#gl)"><path d="M150 650 H1068" stroke="#3ddbd9" stroke-opacity="0.5" stroke-width="2"/></g>
+</svg>

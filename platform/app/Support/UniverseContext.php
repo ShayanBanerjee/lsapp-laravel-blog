@@ -2,7 +2,6 @@
 
 namespace App\Support;
 
-use App\Models\CustomTheme;
 use App\Models\Persona;
 use App\Models\Universe;
 use App\Models\User;
@@ -29,7 +28,7 @@ class UniverseContext
             return null;
         }
 
-        $personas = $user->personas()->with('universe')->get();
+        $personas = $user->personas()->with(['universe', 'customTheme'])->get();
 
         if ($personas->isEmpty()) {
             return null;
@@ -37,7 +36,9 @@ class UniverseContext
 
         $selected = $personas->firstWhere('id', $request->session()->get(self::SESSION_KEY));
 
-        return $selected ?? $personas->first();
+        // The author of the active persona is, by definition, the user we
+        // already hold — saying so saves themeFor() a lookup on every request.
+        return ($selected ?? $personas->first())->setRelation('user', $user);
     }
 
     /**
@@ -61,61 +62,64 @@ class UniverseContext
      * Falls back to the free Cosmos token set so a locked universe still
      * renders a coherent page rather than an unstyled one.
      *
+     * When a persona is supplied and wears a custom theme, that theme's tokens
+     * replace the universe's — see themeFor() for the entitlement rule.
+     *
      * @return array<string, mixed>|null
      */
-    public static function serialize(?Universe $universe, ?User $user): ?array
+    public static function serialize(?Universe $universe, ?User $user, ?Persona $persona = null): ?array
     {
         if (! $universe) {
             return null;
         }
 
-        if ($user && $user->canAccessUniverse($universe)) {
-            return self::withCustomTheme($universe->tokens(), $user) + ['locked' => false];
+        $entitled = ($user && $user->canAccessUniverse($universe)) || ! $universe->is_premium;
+
+        if (! $entitled) {
+            $fallback = Universe::cachedAll()->firstWhere('slug', self::FALLBACK_SLUG);
+
+            return $universe->preview() + [
+                'locked' => true,
+                'theme' => $fallback?->theme ?? $universe->theme,
+            ];
         }
 
-        if (! $universe->is_premium) {
-            return $universe->tokens() + ['locked' => false];
-        }
-
-        $fallback = Universe::cachedAll()->firstWhere('slug', self::FALLBACK_SLUG);
-
-        return $universe->preview() + [
-            'locked' => true,
-            'theme' => $fallback?->theme ?? $universe->theme,
+        return [
+            ...$universe->tokens(),
+            'locked' => false,
+            'theme' => self::themeFor($universe, $persona),
         ];
     }
 
     /**
-     * Layer a user's own palette over the universe's tokens.
+     * The token set a persona's work should actually be read in.
      *
-     * On the *entitled* branch only, and deliberately so: this sits inside the
-     * same server-side gate as the premium token sets, because the theme editor
-     * is a paid feature and gating it in React would put the whole mechanism in
-     * the JS bundle for anyone to read. A user with no active theme, or one who
-     * has lapsed, simply gets the universe tokens back unchanged.
+     * A custom theme applies to everyone reading that persona, not just its
+     * author — the whole point is that the writing carries the look. But it is
+     * a paid feature, so it is checked against the *author's* current plan on
+     * every render: let a lapsed subscription keep serving a custom palette and
+     * the subscription stops meaning anything.
      *
-     * @param  array<string, mixed>  $tokens
      * @return array<string, mixed>
      */
-    private static function withCustomTheme(array $tokens, User $user): array
+    public static function themeFor(Universe $universe, ?Persona $persona): array
     {
-        if (! $user->is_premium) {
-            return $tokens;
+        if (! $persona?->custom_theme_id) {
+            return $universe->theme;
         }
 
-        $theme = CustomTheme::where('user_id', $user->id)->where('is_active', true)->first();
+        // Read through the relation when it is already loaded and fall back to
+        // a query when it is not: preventLazyLoading() is on outside
+        // production, so an unguarded property read here would turn a missing
+        // eager load in some unrelated caller into a hard failure.
+        $theme = $persona->relationLoaded('customTheme')
+            ? $persona->customTheme
+            : $persona->customTheme()->first();
 
-        if (! $theme) {
-            return $tokens;
-        }
+        $author = $persona->relationLoaded('user')
+            ? $persona->user
+            : $persona->user()->first();
 
-        // Overrides were validated to hex on write; re-filter on read so a row
-        // written before that rule existed cannot reach a style attribute.
-        $tokens['theme'] = array_merge(
-            $tokens['theme'] ?? [],
-            CustomTheme::sanitizeOverrides($theme->overrides ?? []),
-        );
-
-        return $tokens;
+        return ($theme && $author?->is_premium) ? $theme->tokens : $universe->theme;
     }
 }

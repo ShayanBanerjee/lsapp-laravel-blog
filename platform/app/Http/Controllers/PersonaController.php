@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Persona;
 use App\Models\Universe;
 use App\Models\User;
-use App\Rules\VanityHandle;
+use App\Support\Handles;
 use App\Support\UniverseContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -40,6 +40,14 @@ class PersonaController extends Controller
                 ]),
             'canCreate' => $user->canCreateAnotherPersona(),
             'personaLimit' => $user->is_premium ? null : User::FREE_PERSONA_LIMIT,
+            'themes' => $user->customThemes()->get(['id', 'name'])->map(fn ($theme) => [
+                'id' => $theme->id,
+                'name' => $theme->name,
+            ]),
+            'handles' => [
+                'vanityMaxLength' => Handles::VANITY_MAX_LENGTH,
+                'canClaimVanity' => $user->is_premium,
+            ],
         ]);
     }
 
@@ -48,17 +56,13 @@ class PersonaController extends Controller
         $this->authorize('create', Persona::class);
 
         $data = $request->validate([
-            'handle' => [
-                'required', 'string', 'max:30', 'alpha_dash',
-                Rule::unique('personas', 'handle'),
-                // Short handles are the paid tier; reserved words are blocked
-                // for everyone, premium or not.
-                new VanityHandle($request->user()->is_premium),
-            ],
+            'handle' => $this->handleRules(),
             'display_name' => ['required', 'string', 'max:60'],
             'bio' => ['nullable', 'string', 'max:400'],
             'universe_id' => ['required', 'exists:universes,id'],
         ]);
+
+        $this->guardHandle($request, $data['handle']);
 
         $universe = Universe::findOrFail($data['universe_id']);
         $this->authorize('use', $universe);
@@ -73,9 +77,16 @@ class PersonaController extends Controller
         $this->authorize('update', $persona);
 
         $data = $request->validate([
+            // A writer may rename a voice. Uniqueness ignores the persona's own
+            // row so saving an unchanged handle is not an error.
+            'handle' => $this->handleRules($persona->id),
             'display_name' => ['required', 'string', 'max:60'],
             'bio' => ['nullable', 'string', 'max:400'],
         ]);
+
+        if ($data['handle'] !== $persona->handle) {
+            $this->guardHandle($request, $data['handle']);
+        }
 
         $persona->update($data);
 
@@ -94,6 +105,49 @@ class PersonaController extends Controller
         }
 
         return back()->with('success', 'Persona retired. Their posts remain yours.');
+    }
+
+    /**
+     * @return array<int, mixed>
+     */
+    private function handleRules(?int $ignoreId = null): array
+    {
+        $unique = Rule::unique('personas', 'handle');
+
+        return [
+            'required', 'string',
+            'min:'.Handles::MIN_LENGTH,
+            'max:'.Handles::MAX_LENGTH,
+            'alpha_dash',
+            $ignoreId ? $unique->ignore($ignoreId) : $unique,
+        ];
+    }
+
+    /**
+     * Reserved words and the vanity-length tier, reported as a field error.
+     *
+     * Kept out of the rule array on purpose: when a handle is refused because
+     * it is short, the useful reply is an upgrade path, and when it is taken,
+     * the useful reply is a handle that is not — neither fits in a rule.
+     */
+    private function guardHandle(Request $request, string $handle): void
+    {
+        $reason = Handles::rejectionReason($handle, $request->user());
+
+        if ($reason === null) {
+            return;
+        }
+
+        $suggestion = Handles::suggest(
+            $handle,
+            fn (string $candidate) => Persona::where('handle', $candidate)->exists(),
+        );
+
+        throw ValidationException::withMessages([
+            'handle' => $suggestion && ! Handles::isVanity($suggestion)
+                ? $reason.' @'.$suggestion.' is free.'
+                : $reason,
+        ]);
     }
 
     /** Switch which persona the writer is currently working as. */

@@ -221,34 +221,30 @@ class PostTest extends TestCase
         $this->assertDatabaseMissing('posts', ['title' => 'Impersonation']);
     }
 
-    /**
-     * Storytelling blocks have to survive the sanitiser on the way in, or the
-     * editor silently produces markup the reader never sees. The security
-     * behaviour of each attribute is covered in HtmlSanitizerTest; this is the
-     * round trip through an actual publish.
-     */
-    public function test_storytelling_blocks_survive_publishing(): void
+    public function test_a_storytelling_block_round_trips_and_is_expanded_for_readers(): void
     {
         [$user, $persona] = $this->writer();
 
-        $body = '<p>Opening.</p>'
-            .'<figure data-story="callout" data-story-value="4.2" data-story-label="light years">'
-            .'<p>Context for the number.</p></figure>'
-            .'<figure data-story="pinned"><img src="/images/covers/cosmos-1.jpg" alt="Stars">'
-            .'<p>Text that moves past it.</p></figure>';
-
         $this->actingAs($user)->post('/posts', [
+            'title' => 'A piece with a callout',
+            'body' => '<p>Before.</p><figure data-story="callout" data-value="87%" data-label="of drafts are never published"></figure>',
             'persona_id' => $persona->id,
-            'title' => 'A Piece With Blocks',
-            'body' => $body,
             'status' => 'published',
-        ])->assertRedirect();
+        ])->assertSessionHasNoErrors();
 
-        $stored = Post::where('title', 'A Piece With Blocks')->firstOrFail()->body;
+        $post = Post::firstOrFail();
 
-        $this->assertStringContainsString('data-story="callout"', $stored);
-        $this->assertStringContainsString('data-story-value="4.2"', $stored);
-        $this->assertStringContainsString('data-story="pinned"', $stored);
-        $this->assertStringContainsString('src="/images/covers/cosmos-1.jpg"', $stored);
+        // Stored compact…
+        $this->assertStringContainsString('data-story="callout"', $post->body);
+        $this->assertStringNotContainsString('u-story-callout', $post->body);
+
+        // …expanded for readers…
+        $this->get('/posts/'.$post->slug)
+            ->assertInertia(fn ($page) => $page->where('post.body', fn (string $body) => str_contains($body, 'u-story-callout')));
+
+        // …and handed back to the editor in the form TipTap can parse.
+        $this->actingAs($user)->get('/posts/'.$post->slug.'/edit')
+            ->assertInertia(fn ($page) => $page->where('post.body', fn (string $body) => str_contains($body, 'data-story="callout"')
+                && ! str_contains($body, 'u-story-callout')));
     }
 }

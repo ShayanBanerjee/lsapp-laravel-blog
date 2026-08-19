@@ -193,6 +193,129 @@
     --u-r-sm: 9px;
     --u-r-lg: 22px;
     --u-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+    /* Decelerating. For anything the pointer is driving — it must feel like it
+       arrives rather than like it is still catching up. */
+    --u-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+    /* Slight overshoot. Reserved for elements entering, never for hover. */
+    --u-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ------------------------------------------------------------------ *
+ * Token bridge: shadcn → universe
+ *
+ * Two design systems live in this app. The universe system (`--u-*`) is the
+ * product's own and drives everything bespoke. The shadcn set (`--background`,
+ * `--input`, `--primary`…) arrived with the starter kit and is still used by
+ * the form primitives on the auth and settings pages.
+ *
+ * Those primitives were unreadable inside a universe, and the reason is worth
+ * recording. `.u-root` sets `color: var(--u-text)` — light, on a dark ground.
+ * shadcn's `<Input>` sets `bg-background` but no text colour, so it inherited
+ * that light text onto a white field: measured contrast 1.06:1, which is
+ * invisible rather than merely poor.
+ *
+ * Patching each component would leave the same trap set for the next one
+ * added. Instead the shadcn tokens are redefined *inside* `.u-root` to resolve
+ * to universe tokens, so any component from either system is correct anywhere,
+ * including in universes that do not exist yet.
+ *
+ * Note `--accent` here is shadcn's hover-surface token, not the brand accent —
+ * that one is `--primary`.
+ *
+ * **Both families have to be redefined.** Tailwind v4's `@theme` block declares
+ * `--color-background: var(--background)` at `:root`, and a custom property is
+ * substituted where it is *declared*, not where it is used — so redefining
+ * `--background` further down the tree does not reach `--color-background`, and
+ * `bg-background` keeps resolving to the light value it captured. The `--color-*`
+ * names are what utilities actually read, so they are set explicitly below.
+ * ------------------------------------------------------------------ */
+
+@layer base {
+    .u-root {
+        /* What Tailwind utilities read (bg-background, text-foreground, …). */
+        --color-background: var(--u-bg);
+        --color-foreground: var(--u-text);
+        --color-card: var(--u-surface-1);
+        --color-card-foreground: var(--u-text);
+        --color-popover: var(--u-surface-1);
+        --color-popover-foreground: var(--u-text);
+        --color-primary: var(--u-accent);
+        --color-primary-foreground: var(--u-accent-fg);
+        --color-secondary: var(--u-surface-2);
+        --color-secondary-foreground: var(--u-text);
+        --color-muted: var(--u-surface-2);
+        --color-muted-foreground: var(--u-text-muted);
+        --color-accent: var(--u-surface-2);
+        --color-accent-foreground: var(--u-text);
+        --color-border: var(--u-border);
+        --color-input: var(--u-border);
+        --color-ring: var(--u-accent);
+        --color-sidebar: var(--u-surface-1);
+        --color-sidebar-foreground: var(--u-text);
+        --color-sidebar-primary: var(--u-accent);
+        --color-sidebar-primary-foreground: var(--u-accent-fg);
+        --color-sidebar-accent: var(--u-surface-2);
+        --color-sidebar-accent-foreground: var(--u-text);
+        --color-sidebar-border: var(--u-border);
+        --color-sidebar-ring: var(--u-accent);
+
+        /* What any raw var(--background) reference reads. */
+        --background: var(--u-bg);
+        --foreground: var(--u-text);
+
+        --card: var(--u-surface-1);
+        --card-foreground: var(--u-text);
+
+        --popover: var(--u-surface-1);
+        --popover-foreground: var(--u-text);
+
+        --primary: var(--u-accent);
+        --primary-foreground: var(--u-accent-fg);
+
+        --secondary: var(--u-surface-2);
+        --secondary-foreground: var(--u-text);
+
+        --muted: var(--u-surface-2);
+        --muted-foreground: var(--u-text-muted);
+
+        --accent: var(--u-surface-2);
+        --accent-foreground: var(--u-text);
+
+        --border: var(--u-border);
+        --input: var(--u-border);
+        --ring: var(--u-accent);
+
+        --sidebar-background: var(--u-surface-1);
+        --sidebar-foreground: var(--u-text);
+        --sidebar-primary: var(--u-accent);
+        --sidebar-primary-foreground: var(--u-accent-fg);
+        --sidebar-accent: var(--u-surface-2);
+        --sidebar-accent-foreground: var(--u-text);
+        --sidebar-border: var(--u-border);
+        --sidebar-ring: var(--u-accent);
+    }
+
+    /*
+     * A field taking the page colour reads as a hole rather than an input, so
+     * fields get the same recessed surface `.u-field` uses. The explicit text
+     * colour is the belt to the token bridge's braces: nothing here can inherit
+     * its way back to invisible.
+     */
+    .u-root input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']),
+    .u-root textarea,
+    .u-root select {
+        background-color: color-mix(in srgb, var(--u-bg-deep) 55%, var(--u-surface-1));
+        color: var(--u-text);
+        border-color: var(--u-border);
+    }
+
+    .u-root input::placeholder,
+    .u-root textarea::placeholder {
+        color: var(--u-text-muted);
+        opacity: 0.75;
+    }
 }
 
 /* In @layer components so Tailwind utilities (hidden, flex, spacing) still win
@@ -271,10 +394,45 @@
         transform: scale(1.06);
     }
 
+    /*
+     * The display face.
+     *
+     * Fraunces is variable along optical size, SOFT and WONK. Those axes are
+     * the identity: `wonk` swaps in the calligraphic single-storey forms that
+     * make a headline here look drawn rather than set, and optical size keeps
+     * a 64px title from looking like a 16px one scaled up — which is exactly
+     * what makes most sites' headlines feel generic.
+     */
     .font-display {
-        font-family: 'Instrument Serif', 'Iowan Old Style', Georgia, serif;
-        font-weight: 400;
-        letter-spacing: -0.015em;
+        font-family: 'Fraunces', 'Iowan Old Style', Georgia, serif;
+        font-weight: 500;
+        font-variation-settings:
+            'SOFT' 22,
+            'WONK' 1,
+            'opsz' 96;
+        letter-spacing: -0.021em;
+    }
+
+    /* Small display text needs a lower optical size or it looks spindly. */
+    .font-display-sm {
+        font-family: 'Fraunces', 'Iowan Old Style', Georgia, serif;
+        font-weight: 600;
+        font-variation-settings:
+            'SOFT' 40,
+            'WONK' 0,
+            'opsz' 20;
+        letter-spacing: -0.008em;
+    }
+
+    /* The masthead and anything meant to read as the brand itself. */
+    .font-brand {
+        font-family: 'Fraunces', 'Iowan Old Style', Georgia, serif;
+        font-weight: 600;
+        font-variation-settings:
+            'SOFT' 12,
+            'WONK' 1,
+            'opsz' 48;
+        letter-spacing: -0.028em;
     }
 
     /* --- 1. Atmosphere -------------------------------------------------------- */
@@ -399,61 +557,207 @@
             0 22px 44px -18px color-mix(in srgb, var(--u-metal-shadow) 85%, transparent);
     }
 
+    /*
+     * A keycap. Used where a keyboard shortcut is mentioned inline — a shortcut
+     * written as plain text reads as prose and gets skipped.
+     */
+    .u-kbd {
+        display: inline-block;
+        min-width: 1.5em;
+        padding: 0.1em 0.4em;
+        border: 1px solid var(--u-border);
+        border-bottom-width: 2px;
+        border-radius: 5px;
+        background-color: var(--u-surface-2);
+        color: var(--u-text);
+        font-family: ui-monospace, monospace;
+        font-size: 0.85em;
+        line-height: 1.4;
+        text-align: center;
+    }
+
+    /* --- Buttons -------------------------------------------------------------
+     *
+     * A button here is a piece of machined metal, not a coloured rectangle.
+     * Four things happen on interaction, and each is doing a job:
+     *
+     * 1. **Lift** — 1px of travel plus a shadow that grows. Depth cue.
+     * 2. **Specular sweep** — a band of light crosses the face. This is the
+     *    one that makes it read as metal rather than plastic; a flat fill
+     *    cannot show you it has a surface.
+     * 3. **Magnetic pull** — `--u-mx/--u-my` are written by useMagnetic from
+     *    pointer position, so the button leans very slightly toward the
+     *    cursor. Kept under 4px: past that it stops feeling responsive and
+     *    starts feeling broken.
+     * 4. **Press** — travel inverts and the shadow collapses, so the click
+     *    lands physically rather than just changing state.
+     *
+     * All four are transform/opacity only, so they run on the compositor and
+     * never trigger layout. All four are disabled under reduced motion, where
+     * the button keeps its colours and loses its movement.
+     */
     .u-btn {
         position: relative;
+        isolation: isolate;
+        overflow: hidden;
         display: inline-flex;
         align-items: center;
         justify-content: center;
         gap: 0.5rem;
         border-radius: var(--u-r-sm);
-        padding: 0.6rem 1.1rem;
+        padding: 0.62rem 1.15rem;
         font-size: 0.875rem;
-        font-weight: 550;
+        font-weight: 560;
         line-height: 1;
+        letter-spacing: -0.005em;
         white-space: nowrap;
         cursor: pointer;
+
+        /* Written by useMagnetic; zero until a pointer is over the button. */
+        --u-mx: 0px;
+        --u-my: 0px;
+
+        transform: translate3d(var(--u-mx), calc(var(--u-my) - var(--u-btn-lift, 0px)), 0);
         transition:
-            transform 0.2s var(--u-ease),
-            filter 0.2s var(--u-ease),
-            background-color 0.2s var(--u-ease);
+            transform 0.34s var(--u-ease-out),
+            box-shadow 0.34s var(--u-ease),
+            border-color 0.24s var(--u-ease),
+            background-color 0.24s var(--u-ease),
+            filter 0.24s var(--u-ease);
     }
 
-    .u-btn:active {
-        transform: translateY(1px);
+    /* The travelling highlight. A pseudo-element so no extra DOM is needed. */
+    .u-btn::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        pointer-events: none;
+        opacity: 0;
+        background-image: linear-gradient(105deg, transparent 25%, color-mix(in srgb, var(--u-metal-sheen) 42%, transparent) 48%, transparent 72%);
+        transform: translateX(-72%);
+        transition:
+            transform 0.75s var(--u-ease-out),
+            opacity 0.28s var(--u-ease);
+    }
+
+    .u-btn:hover:not(:disabled)::after,
+    .u-btn:focus-visible:not(:disabled)::after {
+        opacity: 1;
+        transform: translateX(72%);
+    }
+
+    .u-btn:hover:not(:disabled) {
+        --u-btn-lift: 1.5px;
+    }
+
+    .u-btn:active:not(:disabled) {
+        --u-btn-lift: -1px;
+        transition-duration: 0.08s;
+    }
+
+    /*
+     * Focus is a ring on the element, not a browser default that the metal
+     * surfaces would swallow. Offset so it reads against a dark background.
+     */
+    .u-btn:focus-visible {
+        outline: none;
+        box-shadow:
+            0 0 0 2px var(--u-bg),
+            0 0 0 4px var(--u-accent);
     }
 
     .u-btn:disabled {
-        opacity: 0.5;
+        opacity: 0.45;
         cursor: not-allowed;
+        --u-btn-lift: 0px;
     }
 
     .u-btn-primary {
         color: var(--u-accent-fg);
         background-image: linear-gradient(
             180deg,
-            color-mix(in srgb, var(--u-accent) 88%, white) 0%,
-            var(--u-accent) 55%,
-            color-mix(in srgb, var(--u-accent) 86%, black) 100%
+            color-mix(in srgb, var(--u-accent) 86%, white) 0%,
+            var(--u-accent) 52%,
+            color-mix(in srgb, var(--u-accent) 84%, black) 100%
         );
         box-shadow:
-            inset 0 1px 0 rgb(255 255 255 / 0.32),
+            inset 0 1px 0 rgb(255 255 255 / 0.34),
+            inset 0 -1px 0 color-mix(in srgb, var(--u-metal-shadow) 40%, transparent),
             0 1px 2px color-mix(in srgb, var(--u-metal-shadow) 50%, transparent),
-            0 10px 22px -12px var(--u-glow);
+            0 10px 24px -14px var(--u-glow);
     }
 
     .u-btn-primary:hover:not(:disabled) {
-        filter: brightness(1.07);
+        filter: brightness(1.06) saturate(1.04);
+        box-shadow:
+            inset 0 1px 0 rgb(255 255 255 / 0.4),
+            inset 0 -1px 0 color-mix(in srgb, var(--u-metal-shadow) 40%, transparent),
+            0 2px 4px color-mix(in srgb, var(--u-metal-shadow) 45%, transparent),
+            0 20px 40px -18px var(--u-glow);
+    }
+
+    .u-btn-primary:active:not(:disabled) {
+        filter: brightness(0.97);
+        box-shadow:
+            inset 0 2px 5px color-mix(in srgb, var(--u-metal-shadow) 55%, transparent),
+            0 1px 1px color-mix(in srgb, var(--u-metal-shadow) 40%, transparent);
     }
 
     .u-btn-ghost {
         color: var(--u-text);
         border: 1px solid var(--u-border);
-        background-color: color-mix(in srgb, var(--u-surface-2) 60%, transparent);
+        background-color: color-mix(in srgb, var(--u-surface-2) 55%, transparent);
+        backdrop-filter: blur(6px);
     }
 
     .u-btn-ghost:hover:not(:disabled) {
         border-color: var(--u-metal-edge);
         background-color: var(--u-surface-2);
+        box-shadow: 0 10px 24px -18px color-mix(in srgb, var(--u-metal-shadow) 90%, transparent);
+    }
+
+    /*
+     * The quiet variant: text with an underline that grows from the left.
+     * For actions that must be available without competing for attention.
+     */
+    .u-btn-quiet {
+        color: var(--u-text-muted);
+        padding-inline: 0.35rem;
+        overflow: visible;
+    }
+
+    .u-btn-quiet::before {
+        content: '';
+        position: absolute;
+        left: 0.35rem;
+        right: 0.35rem;
+        bottom: 0.28rem;
+        height: 1px;
+        background-color: currentColor;
+        transform: scaleX(0);
+        transform-origin: left;
+        transition: transform 0.32s var(--u-ease-out);
+    }
+
+    .u-btn-quiet:hover:not(:disabled) {
+        color: var(--u-text);
+    }
+
+    .u-btn-quiet:hover:not(:disabled)::before {
+        transform: scaleX(1);
+    }
+
+    /* Sizes. */
+    .u-btn-lg {
+        padding: 0.85rem 1.6rem;
+        font-size: 0.95rem;
+        border-radius: var(--u-r-md);
+    }
+
+    .u-btn-sm {
+        padding: 0.4rem 0.75rem;
+        font-size: 0.8125rem;
     }
 
     /* --- 7. Form controls ----------------------------------------------------- */
@@ -705,166 +1009,258 @@
 /* ------------------------------------------------------------------ *
  * Storytelling blocks
  *
- * In @layer components, like every custom class here — unlayered CSS
- * outranks every Tailwind utility and silently breaks things like md:hidden.
- *
- * The static styles stand alone: a block is completely readable with no
- * JavaScript, which is what makes these safe to server-render and safe under
- * reduced motion. `[data-story-ready]` is set only once the enhancement hook
- * has attached, so the animated states can never strand content invisible on
- * a page where the script never ran.
+ * Markup for these is generated server-side by App\Support\StoryBlocks, so
+ * the class names here are a contract with that file. Behaviour is CSS first:
+ * the pinned block is `position: sticky` rather than a scroll listener, and
+ * the comparison slider is a real range input. The only JavaScript involved is
+ * the reveal on the sequence block, and it degrades to "everything visible".
  * ------------------------------------------------------------------ */
+
 @layer components {
-    figure[data-story] {
+    .u-story {
         margin: 3.5rem 0;
-        padding: 1.75rem;
-        border: 1px solid var(--u-border);
-        border-radius: 14px;
-        background: color-mix(in srgb, var(--u-surface-1) 70%, transparent);
     }
 
-    figure[data-story] > * + * {
-        margin-top: 1rem;
-    }
-
-    figure[data-story] img {
-        width: 100%;
-        border-radius: 10px;
-        display: block;
-    }
-
-    figure[data-story] figcaption {
-        font-size: 0.8125rem;
+    .u-story figcaption {
+        margin-top: 0.85rem;
+        font-size: 0.85rem;
+        line-height: 1.6;
         color: var(--u-text-muted);
     }
 
-    /* Pinned: the image holds while the prose beside it moves past. Sticky
-       only where there is room for two columns; stacked on small screens,
-       where a sticky image would eat the whole viewport. */
-    @media (min-width: 1024px) {
-        figure[data-story='pinned'] {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-            gap: 2.5rem;
-            align-items: start;
-        }
+    /* --- Pinned image with steps scrolling past it --- */
 
-        figure[data-story='pinned'] > img:first-child {
-            position: sticky;
-            top: 6rem;
-        }
-
-        /* Grid children need min-width:0 or long words refuse to wrap and
-           push the page out sideways. */
-        figure[data-story='pinned'] > * {
-            min-width: 0;
-        }
-    }
-
-    /* Steps: numbered, and revealed one at a time once enhanced. */
-    figure[data-story='steps'] {
-        counter-reset: story-step;
-    }
-
-    figure[data-story='steps'] > * {
-        counter-increment: story-step;
-        padding-left: 3rem;
-        position: relative;
-    }
-
-    figure[data-story='steps'] > *::before {
-        content: counter(story-step);
-        position: absolute;
-        left: 0;
-        top: -0.15rem;
-        width: 2rem;
-        height: 2rem;
+    .u-story-pinned {
         display: grid;
-        place-items: center;
-        border-radius: 999px;
+        gap: 1.5rem;
+    }
+
+    .u-story-pinned .u-story-media {
+        position: sticky;
+        top: 6rem;
+        overflow: hidden;
+        border-radius: 14px;
         border: 1px solid var(--u-border);
-        background: var(--u-surface-2);
-        color: var(--u-accent);
-        font-size: 0.8125rem;
-        font-variant-numeric: tabular-nums;
+        max-height: 60vh;
     }
 
-    /* Only hide steps once we know something is going to reveal them. */
-    figure[data-story='steps'][data-story-ready] > *:not([data-story-settled]) {
-        opacity: 0;
-        transform: translateY(12px);
-    }
-
-    figure[data-story='steps'][data-story-ready] > * {
-        transition:
-            opacity 0.5s var(--u-ease),
-            transform 0.5s var(--u-ease);
-    }
-
-    /* Before / after: two stacked images, wiped by a reader-controlled slider.
-       Static fallback is simply both images, one after the other. */
-    figure[data-story='before-after'][data-story-ready] {
-        position: relative;
-        --story-wipe: 50%;
-    }
-
-    figure[data-story='before-after'][data-story-ready] img {
-        grid-area: 1 / 1;
-    }
-
-    figure[data-story='before-after'][data-story-ready] {
-        display: grid;
-    }
-
-    figure[data-story='before-after'][data-story-ready] img:nth-of-type(2) {
-        clip-path: inset(0 0 0 var(--story-wipe));
-    }
-
-    figure[data-story='before-after'] .story-wipe-handle {
-        grid-area: 1 / 1;
-        align-self: end;
+    .u-story-pinned .u-story-media img {
         width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+
+    .u-story-pinned .u-story-steps {
+        display: flex;
+        flex-direction: column;
+        gap: 45vh;
+        padding: 12vh 0 30vh;
+    }
+
+    .u-story-pinned .u-story-step p {
         margin: 0;
-        z-index: 1;
-        accent-color: var(--u-accent);
+        font-size: 1.15em;
+        line-height: 1.7;
     }
 
-    /* Callout: one number, large, and the sentence that gives it meaning. */
-    figure[data-story='callout'] {
-        text-align: center;
+    @media (min-width: 900px) {
+        .u-story-pinned {
+            grid-template-columns: 1fr 1fr;
+            align-items: start;
+            gap: 3rem;
+        }
+
+        .u-story-pinned .u-story-media {
+            max-height: calc(100vh - 9rem);
+        }
+
+        .u-story-pinned figcaption {
+            grid-column: 1 / -1;
+        }
     }
 
-    figure[data-story='callout']::before {
-        content: attr(data-story-value);
-        display: block;
-        font-family: var(--u-font-display, inherit);
-        font-size: clamp(2.75rem, 9vw, 5rem);
-        line-height: 1;
-        color: var(--u-accent);
-        font-variant-numeric: tabular-nums;
+    /*
+     * Wide blocks break out of the reading measure. The prose column is
+     * deliberately narrow for text; a pinned image or a comparison confined to
+     * it would be a thumbnail.
+     */
+    .prose-u .u-story-pinned,
+    .prose-u .u-story-compare {
+        width: min(100vw - 3rem, 1080px);
+        margin-inline: calc(50% - min(50vw - 1.5rem, 540px));
     }
 
-    figure[data-story='callout'][data-story-label]::after {
-        content: attr(data-story-label);
-        display: block;
-        margin-top: 0.5rem;
-        font-size: 0.6875rem;
+    /* --- Step-through sequence --- */
+
+    .u-story-sequence .u-story-title {
+        margin: 0 0 1.25rem;
+        font-size: 0.7rem;
+        font-weight: 600;
         letter-spacing: 0.18em;
         text-transform: uppercase;
         color: var(--u-text-muted);
     }
 
-    figure[data-story='pinned'][data-story-ready]:not([data-story-settled]),
-    figure[data-story='callout'][data-story-ready]:not([data-story-settled]) {
-        opacity: 0;
-        transform: translateY(14px);
+    .u-story-sequence ol {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+        counter-reset: none;
     }
 
-    figure[data-story='pinned'][data-story-ready],
-    figure[data-story='callout'][data-story-ready] {
+    .u-story-sequence .u-story-step {
+        display: flex;
+        gap: 1rem;
+        align-items: flex-start;
+        padding: 1.15rem 1.25rem;
+        border: 1px solid var(--u-border);
+        border-radius: 12px;
+        background: color-mix(in srgb, var(--u-surface-1) 70%, transparent);
+
+        /* Hidden until revealed — and forced visible again below for anyone
+           who has asked for less motion, or who has no JavaScript. */
+        opacity: 0;
+        transform: translateY(14px);
         transition:
-            opacity 0.6s var(--u-ease),
-            transform 0.6s var(--u-ease);
+            opacity 0.5s var(--u-ease),
+            transform 0.5s var(--u-ease);
+    }
+
+    .u-story-sequence .u-story-step[data-revealed='true'] {
+        opacity: 1;
+        transform: none;
+    }
+
+    .u-story-sequence .u-story-num {
+        flex: 0 0 auto;
+        width: 1.9rem;
+        height: 1.9rem;
+        display: grid;
+        place-items: center;
+        border-radius: 999px;
+        font-size: 0.85rem;
+        font-variant-numeric: tabular-nums;
+        background: var(--u-accent-soft);
+        color: var(--u-accent);
+    }
+
+    .u-story-sequence .u-story-body {
+        min-width: 0;
+        line-height: 1.65;
+    }
+
+    /* --- Before / after --- */
+
+    .u-story-compare-frame {
+        position: relative;
+        overflow: hidden;
+        border-radius: 14px;
+        border: 1px solid var(--u-border);
+        line-height: 0;
+
+        /* Read by the range input's handler; the clip and handle both key off
+           this one custom property, so one write moves everything. */
+        --u-compare: 50%;
+    }
+
+    .u-story-compare-frame img {
+        display: block;
+        width: 100%;
+    }
+
+    .u-story-compare-clip {
+        position: absolute;
+        inset: 0;
+        width: var(--u-compare);
+        overflow: hidden;
+    }
+
+    .u-story-compare-clip img {
+        height: 100%;
+        object-fit: cover;
+        /* The clipped copy must not shrink with its container, or the two
+           images stop lining up as the slider moves. */
+        width: max(100%, 1px);
+        min-width: 100cqw;
+    }
+
+    .u-story-compare-handle {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: var(--u-compare);
+        width: 2px;
+        margin-left: -1px;
+        background: var(--u-accent);
+        pointer-events: none;
+    }
+
+    .u-story-compare-range {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        opacity: 0;
+        cursor: ew-resize;
+    }
+
+    .u-story-compare-range:focus-visible {
+        opacity: 1;
+        outline: 2px solid var(--u-accent);
+        outline-offset: 3px;
+    }
+
+    .u-story-compare-label {
+        position: absolute;
+        bottom: 0.75rem;
+        padding: 0.3rem 0.6rem;
+        border-radius: 999px;
+        font-size: 0.7rem;
+        line-height: 1;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        background: color-mix(in srgb, var(--u-bg-deep) 78%, transparent);
+        color: var(--u-text);
+        pointer-events: none;
+    }
+
+    .u-story-compare-label-before {
+        left: 0.75rem;
+    }
+
+    .u-story-compare-label-after {
+        right: 0.75rem;
+    }
+
+    /* --- Data callout --- */
+
+    .u-story-callout {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.4rem;
+        padding: 2rem 2.25rem;
+        border-left: 3px solid var(--u-accent);
+        background: color-mix(in srgb, var(--u-surface-1) 60%, transparent);
+        border-radius: 0 14px 14px 0;
+    }
+
+    .u-story-callout .u-story-value {
+        font-family: var(--font-display, inherit);
+        font-size: clamp(2.5rem, 7vw, 4rem);
+        line-height: 1;
+        color: var(--u-accent);
+    }
+
+    .u-story-callout .u-story-label {
+        font-size: 1.05rem;
+        line-height: 1.5;
+        color: var(--u-text);
     }
 }
 
@@ -874,25 +1270,48 @@
         animation: none !important;
     }
 
+    /*
+     * Buttons keep every colour and lose every movement: no lift, no magnetic
+     * lean, no travelling highlight. A button that does not move is still
+     * obviously a button.
+     */
+    .u-btn {
+        --u-mx: 0px !important;
+        --u-my: 0px !important;
+        --u-btn-lift: 0px !important;
+        transform: none !important;
+    }
+
+    .u-btn::after {
+        display: none;
+    }
+
+    .u-btn-quiet::before {
+        transform: scaleX(1);
+    }
+
+    /* Storytelling blocks resolve to their finished state, never to missing
+       content — the same rule .u-reveal follows. */
+    .u-story-sequence .u-story-step {
+        opacity: 1 !important;
+        transform: none !important;
+    }
+
+    .u-story-pinned .u-story-media {
+        position: static;
+        max-height: none;
+    }
+
+    .u-story-pinned .u-story-steps {
+        gap: 1.5rem;
+        padding: 0;
+    }
+
     /* Reveal must resolve to visible, not stay stuck transparent. */
     .u-reveal {
         opacity: 1 !important;
         transform: none !important;
         transition: none !important;
-    }
-
-    /* Storytelling blocks resolve to the finished state — every step present,
-       every block visible. Reduced motion means content without movement, and
-       never content that failed to arrive. */
-    figure[data-story],
-    figure[data-story] > * {
-        opacity: 1 !important;
-        transform: none !important;
-        transition: none !important;
-    }
-
-    figure[data-story='pinned'] > img:first-child {
-        position: static !important;
     }
 
     .specular-pointer::after {

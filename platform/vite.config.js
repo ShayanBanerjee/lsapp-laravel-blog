@@ -1,16 +1,20 @@
 import react from '@vitejs/plugin-react';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import laravel from 'laravel-vite-plugin';
 import {
     defineConfig
 } from 'vite';
 import tailwindcss from "@tailwindcss/vite";
-import path from 'node:path';
+
+// This config is ESM, so __dirname does not exist; derive it from import.meta.
+const projectRoot = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
     plugins: [
         laravel({
             input: ['resources/css/app.css', 'resources/js/app.tsx'],
-            ssr: 'resources/js/ssr.jsx',
+            ssr: 'resources/js/ssr.tsx',
             refresh: true,
         }),
         react(),
@@ -19,13 +23,13 @@ export default defineConfig({
     resolve: {
         alias: {
             /*
-             * The Ziggy JS client ships with the composer package, not npm.
-             * The browser gets `route()` as a global from the @routes
-             * directive, so the client bundle never has to resolve this — but
-             * the SSR bundle has no such global and must import the real
-             * module, which needs the alias to be found at all.
+             * Ziggy ships its JavaScript inside the Composer package rather
+             * than as an npm dependency. The browser normally gets it from the
+             * @routes Blade directive, but the SSR bundle has to import it —
+             * and aliasing the vendored copy keeps the PHP and JS halves on the
+             * same version, which a separate npm install would not.
              */
-            'ziggy-js': path.resolve('vendor/tightenco/ziggy'),
+            'ziggy-js': resolve(projectRoot, 'vendor/tightenco/ziggy/dist'),
         },
     },
     esbuild: {

@@ -14,9 +14,10 @@ interface PersonaOption {
 interface Props {
     post: PostCard & { body: string; persona_id: number | null };
     personas: PersonaOption[];
+    canPublish?: boolean;
 }
 
-export default function PostEdit({ post, personas }: Props) {
+export default function PostEdit({ post, personas, canPublish = true }: Props) {
     return (
         <SiteLayout wide>
             <Head title={`Editing ${post.title}`} />
@@ -30,6 +31,7 @@ export default function PostEdit({ post, personas }: Props) {
 
             <PostForm
                 personas={personas}
+                canPublish={canPublish}
                 post={{
                     slug: post.slug,
                     title: post.title,

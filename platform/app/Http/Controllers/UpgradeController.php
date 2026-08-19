@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Universe;
 use App\Models\User;
+use App\Support\Handles;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -33,6 +34,7 @@ class UpgradeController extends Controller
                     'locked' => $universe->is_premium && ! ($user?->canAccessUniverse($universe) ?? false),
                 ]),
             'freePersonaLimit' => User::FREE_PERSONA_LIMIT,
+            'vanityMaxLength' => Handles::VANITY_MAX_LENGTH,
             'isStub' => ! config('services.stripe.secret'),
         ]);
     }
@@ -44,7 +46,7 @@ class UpgradeController extends Controller
         $request->user()->update(['is_premium' => true]);
 
         return to_route('universes.index')
-            ->with('success', 'Demo premium enabled — all six universes unlocked. No payment was taken.');
+            ->with('success', 'Demo premium enabled — every universe unlocked. No payment was taken.');
     }
 
     public function deactivate(Request $request): RedirectResponse

@@ -8,6 +8,8 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-// Registration spam accumulates quietly. Nightly, off-peak, and conservative
-// about what counts as abandoned — see App\Console\Commands\PruneUnverifiedUsers.
-Schedule::command('users:prune-unverified')->dailyAt('03:15');
+/*
+ * Unconfirmed accounts expire after a month, but only when they are inert —
+ * see PruneUnverifiedAccounts for what counts as inert and why.
+ */
+Schedule::command('inkfathom:prune-unverified')->daily();

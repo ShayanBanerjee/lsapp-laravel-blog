@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
  * as the Deep Field: one subject, read at descending scales.
  *
  * Drawn in `currentColor` and a single accent, so it re-themes automatically in
- * all six universes instead of needing six exported files.
+ * every universe instead of needing one exported file per world.
  */
 export function LogoMark({ className, size = 28 }: { className?: string; size?: number }) {
     return (

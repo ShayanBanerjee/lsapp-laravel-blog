@@ -11,7 +11,15 @@ interface PersonaOption {
     universe: PersonaSummary['universe'];
 }
 
-export default function PostCreate({ personas, prompts = [] }: { personas: PersonaOption[]; prompts?: string[] }) {
+export default function PostCreate({
+    personas,
+    prompts = [],
+    canPublish = true,
+}: {
+    personas: PersonaOption[];
+    prompts?: string[];
+    canPublish?: boolean;
+}) {
     return (
         <SiteLayout wide>
             <Head title="Write" />
@@ -37,7 +45,7 @@ export default function PostCreate({ personas, prompts = [] }: { personas: Perso
                 </Panel>
             )}
 
-            <PostForm personas={personas} />
+            <PostForm personas={personas} canPublish={canPublish} />
         </SiteLayout>
     );
 }

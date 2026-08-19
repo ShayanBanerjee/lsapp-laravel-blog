@@ -102,7 +102,7 @@ class FeedController extends Controller
                 .'<channel>'
                 .'<title>'.e(config('app.name')).'</title>'
                 .'<link>'.e(url('/')).'</link>'
-                .'<description>Writing from six worlds.</description>'
+                .'<description>Writing from every world on Inkfathom.</description>'
                 .'<language>en</language>'
                 .'<atom:link href="'.e(url('/feed.xml')).'" rel="self" type="application/rss+xml"/>'
                 .$items

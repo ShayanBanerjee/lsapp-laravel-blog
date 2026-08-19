@@ -1,82 +1,147 @@
-import { Chip, EmptyState, Panel, SectionHeading, Swatch } from '@/components/metal';
+import { AdSlot, type Ad } from '@/components/ad-slot';
+import { Chip, EmptyState, Panel } from '@/components/metal';
+import { Reveal } from '@/components/reveal';
 import SiteLayout from '@/layouts/site-layout';
-import type { Universe } from '@/types';
-import { Head, Link } from '@inertiajs/react';
-import { GraduationCap, Layers } from 'lucide-react';
+import type { SharedData, UniversePreview } from '@/types';
+import { Head, Link, usePage } from '@inertiajs/react';
+import { Layers, Plus } from 'lucide-react';
 
-interface CourseCard {
+export interface CourseCard {
     slug: string;
     title: string;
     subtitle: string | null;
     description: string | null;
-    level: string;
     cover_url: string | null;
-    lessons_count: number | null;
-    universe: Universe | null;
+    level: string;
+    status: string;
+    published_human: string | null;
+    lesson_count: number | null;
+    completed_count: number | null;
     persona: { handle: string; display_name: string } | null;
+    universe: UniversePreview | null;
 }
 
-export default function CoursesIndex({ courses }: { courses: CourseCard[] }) {
-    return (
-        <SiteLayout>
-            <Head title="Tutorials" />
+interface Paginated<T> {
+    data: T[];
+    links: { url: string | null; label: string; active: boolean }[];
+    total: number;
+}
 
-            <header className="mb-12 max-w-3xl">
-                <h1 className="font-display text-4xl sm:text-6xl">Learning paths</h1>
-                <p className="mt-5 text-lg leading-relaxed" style={{ color: 'var(--u-text-muted)' }}>
-                    Long-form tutorials in several parts, with a contents panel that keeps your place. Leave in the middle of module three and come
-                    back to exactly there — and mark the sentences that landed, the same as anywhere else here.
-                </p>
+export default function CoursesIndex({ courses, ads }: { courses: Paginated<CourseCard>; ads: Ad[] }) {
+    const { auth } = usePage<SharedData>().props;
+
+    return (
+        <SiteLayout wide>
+            <Head title="Courses" />
+
+            <header className="mb-9 flex flex-wrap items-end justify-between gap-4">
+                <div>
+                    <p className="mb-3 text-[11px] font-semibold tracking-[0.18em] uppercase" style={{ color: 'var(--u-text-muted)' }}>
+                        Learning paths
+                    </p>
+                    <h1 className="font-display text-4xl sm:text-5xl">Courses</h1>
+                    <p className="mt-3 max-w-2xl text-base leading-relaxed" style={{ color: 'var(--u-text-muted)' }}>
+                        Long-form teaching, in order. Every lesson is still a piece of writing — you can mark a passage, answer it, or write to the
+                        author, exactly as anywhere else.
+                    </p>
+                </div>
+
+                {auth.user && (
+                    <Link href="/courses/new" className="u-btn u-btn-primary">
+                        <Plus className="size-4" />
+                        Build a course
+                    </Link>
+                )}
             </header>
 
-            {courses.length === 0 ? (
-                <EmptyState title="No tutorials yet" body="Learning paths will appear here once they are published." />
-            ) : (
-                <div className="grid gap-4 md:grid-cols-2">
-                    {courses.map((course) => (
-                        <Panel key={course.slug} interactive className="flex flex-col gap-4 p-6">
-                            <div className="flex items-center gap-3">
-                                {course.universe && <Swatch swatch={course.universe.swatch} size={34} />}
-                                <Chip tone="accent">{course.level}</Chip>
-                                {course.lessons_count !== null && (
-                                    <span className="ml-auto flex items-center gap-1.5 text-xs" style={{ color: 'var(--u-text-muted)' }}>
-                                        <Layers className="size-3.5" />
-                                        {course.lessons_count} {course.lessons_count === 1 ? 'lesson' : 'lessons'}
-                                    </span>
-                                )}
-                            </div>
-
-                            <div className="min-w-0">
-                                <Link href={`/learn/${course.slug}`} className="font-display text-2xl leading-tight hover:underline">
-                                    {course.title}
-                                </Link>
-                                {course.subtitle && (
-                                    <p className="mt-1 text-sm" style={{ color: 'var(--u-text-muted)' }}>
-                                        {course.subtitle}
-                                    </p>
-                                )}
-                            </div>
-
-                            {course.description && (
-                                <p className="line-clamp-3 min-w-0 text-sm leading-relaxed" style={{ color: 'var(--u-text-muted)' }}>
-                                    {course.description}
-                                </p>
-                            )}
-
-                            <Link href={`/learn/${course.slug}`} className="u-btn u-btn-primary mt-auto self-start">
-                                <GraduationCap className="size-4" />
-                                Start
+            {courses.data.length === 0 ? (
+                <EmptyState
+                    title="No courses yet"
+                    body="Nobody has published a learning path here yet. If you know a subject well enough to teach it in order, this is the place."
+                    action={
+                        auth.user ? (
+                            <Link href="/courses/new" className="u-btn u-btn-primary">
+                                Build the first one
                             </Link>
-                        </Panel>
+                        ) : (
+                            <Link href="/register" className="u-btn u-btn-primary">
+                                Start writing
+                            </Link>
+                        )
+                    }
+                />
+            ) : (
+                <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                    {courses.data.map((course, index) => (
+                        <Reveal key={course.slug} delay={Math.min(index * 60, 300)}>
+                            <CourseCardView course={course} />
+                        </Reveal>
                     ))}
                 </div>
             )}
 
-            <SectionHeading eyebrow="Why this shape" title="Addressable, not linear" />
-            <p className="max-w-2xl text-sm leading-relaxed" style={{ color: 'var(--u-text-muted)' }}>
-                A video course makes you scrub a timeline to find the one part that mattered. Text is addressable: you can land on the third section
-                of module two instantly, at your own speed, and the platform can remember you did.
-            </p>
+            {ads.length > 0 && (
+                <div className="mt-12">
+                    <AdSlot ads={ads} />
+                </div>
+            )}
         </SiteLayout>
+    );
+}
+
+export function CourseCardView({ course }: { course: CourseCard }) {
+    const total = course.lesson_count ?? 0;
+    const done = course.completed_count ?? 0;
+    const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+
+    return (
+        <Panel interactive className="h-full">
+            <Link href={`/courses/${course.slug}`} className="flex h-full flex-col">
+                {course.cover_url && (
+                    <div className="relative aspect-[16/9] overflow-hidden rounded-t-[13px]">
+                        <img src={course.cover_url} alt="" className="size-full object-cover" loading="lazy" />
+                    </div>
+                )}
+
+                <div className="flex flex-1 flex-col p-5">
+                    <div className="mb-3 flex flex-wrap items-center gap-2">
+                        <Chip tone="accent">{course.level}</Chip>
+                        {course.universe && <Chip>{course.universe.name}</Chip>}
+                        {course.status === 'draft' && <Chip>Draft</Chip>}
+                    </div>
+
+                    <h2 className="font-display text-xl leading-snug">{course.title}</h2>
+
+                    {course.subtitle && (
+                        <p className="mt-2 line-clamp-2 text-sm leading-relaxed" style={{ color: 'var(--u-text-muted)' }}>
+                            {course.subtitle}
+                        </p>
+                    )}
+
+                    <div className="mt-auto pt-5">
+                        {/* Progress only appears once there is progress — an
+                            empty bar on every card is decoration, not information. */}
+                        {done > 0 && (
+                            <div className="mb-3">
+                                <div className="h-1 overflow-hidden rounded-full" style={{ backgroundColor: 'var(--u-border)' }}>
+                                    <div className="h-full" style={{ width: `${percent}%`, backgroundColor: 'var(--u-accent)' }} />
+                                </div>
+                                <p className="mt-1.5 text-xs" style={{ color: 'var(--u-text-muted)' }}>
+                                    {done} of {total} done
+                                </p>
+                            </div>
+                        )}
+
+                        <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--u-text-muted)' }}>
+                            {course.persona && <span className="font-medium">@{course.persona.handle}</span>}
+                            <span className="ml-auto inline-flex items-center gap-1.5">
+                                <Layers className="size-3.5" />
+                                {total} {total === 1 ? 'lesson' : 'lessons'}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </Link>
+        </Panel>
     );
 }

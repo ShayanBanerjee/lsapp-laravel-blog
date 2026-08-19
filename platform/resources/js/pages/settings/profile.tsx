@@ -1,6 +1,6 @@
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Transition } from '@headlessui/react';
-import { Head, Link, useForm, usePage } from '@inertiajs/react';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { FormEventHandler } from 'react';
 
 import DeleteUser from '@/components/delete-user';
@@ -19,7 +19,14 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function Profile({ mustVerifyEmail, status }: { mustVerifyEmail: boolean; status?: string }) {
+interface OrcidState {
+    available: boolean;
+    id: string | null;
+    name: string | null;
+    linked_human: string | null;
+}
+
+export default function Profile({ mustVerifyEmail, status, orcid }: { mustVerifyEmail: boolean; status?: string; orcid?: OrcidState }) {
     const { auth } = usePage<SharedData>().props;
     // These pages are behind the `auth` middleware, so a user is always present.
     const user = auth.user!;
@@ -115,8 +122,49 @@ export default function Profile({ mustVerifyEmail, status }: { mustVerifyEmail: 
                     </form>
                 </div>
 
+                {orcid?.available && <OrcidPanel orcid={orcid} />}
+
                 <DeleteUser />
             </SettingsLayout>
         </AppLayout>
+    );
+}
+
+/**
+ * ORCID is a link, not a sign-in method — see OrcidController. Linking is a
+ * full-page redirect to ORCID rather than an Inertia visit, because the
+ * destination is another origin.
+ */
+function OrcidPanel({ orcid }: { orcid: OrcidState }) {
+    return (
+        <div className="space-y-6">
+            <HeadingSmall title="ORCID iD" description="A verified researcher identity, shown on manuscript exports and Zenodo deposits." />
+
+            {orcid.id ? (
+                <div className="space-y-4">
+                    <p className="text-sm">
+                        Linked to{' '}
+                        <a
+                            href={`https://orcid.org/${orcid.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-medium underline underline-offset-4"
+                        >
+                            {orcid.id}
+                        </a>
+                        {orcid.name && ` (${orcid.name})`}
+                        {orcid.linked_human && ` — since ${orcid.linked_human}`}
+                    </p>
+
+                    <Button variant="secondary" onClick={() => router.delete('/auth/orcid', { preserveScroll: true })}>
+                        Unlink
+                    </Button>
+                </div>
+            ) : (
+                <Button asChild>
+                    <a href="/auth/orcid/redirect">Link your ORCID iD</a>
+                </Button>
+            )}
+        </div>
     );
 }

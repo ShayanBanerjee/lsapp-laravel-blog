@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { type NavItem } from '@/types';
-import { Link } from '@inertiajs/react';
+import { Link, usePage } from '@inertiajs/react';
 
 const sidebarNavItems: NavItem[] = [
     {
@@ -22,6 +22,16 @@ const sidebarNavItems: NavItem[] = [
         icon: null,
     },
     {
+        title: 'Themes',
+        url: '/settings/themes',
+        icon: null,
+    },
+    {
+        title: 'Connections',
+        url: '/settings/integrations',
+        icon: null,
+    },
+    {
         title: 'Appearance',
         url: '/settings/appearance',
         icon: null,
@@ -29,7 +39,15 @@ const sidebarNavItems: NavItem[] = [
 ];
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
-    const currentPath = window.location.pathname;
+    /*
+     * Read from Inertia's own page url rather than window.location.
+     *
+     * There is no window during server-side rendering, and reading one at
+     * render time is the single most common way an SSR build dies — with a
+     * stack trace pointing at React rather than at the line responsible.
+     */
+    const { url } = usePage();
+    const currentPath = url.split('?')[0];
 
     return (
         <div className="px-4 py-6">

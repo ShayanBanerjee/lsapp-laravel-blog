@@ -6,173 +6,235 @@ use App\Models\Course;
 use App\Models\LessonProgress;
 use App\Models\Post;
 use App\Support\Ads;
-use App\Support\HtmlSanitizer;
+use App\Support\CoursePresenter;
 use App\Support\Seo;
+use App\Support\StoryBlocks;
+use App\Support\UniverseContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * Learning paths.
+ * Reading a course.
  *
- * The side panel is the point. Video makes you scrub a timeline to find the
- * one part that mattered; a contents panel with per-section state means a
- * reader can leave in the middle of module three and come back to exactly
- * there. That is the addressability argument from STRATEGY.md, built.
+ * Lessons are Posts, so everything the reading view already does — marking a
+ * passage, answering it, saving the piece, the reader's own typography — works
+ * here without a second implementation. What a course adds on top is order:
+ * a persistent contents panel, a position within it, and a record of how far
+ * this reader has got.
  */
 class CourseController extends Controller
 {
-    public function index(): Response
+    public function index(Request $request): Response
     {
+        $user = $request->user();
+
         $courses = Course::published()
-            ->with(['universe', 'persona'])
+            ->with(['persona:id,handle,display_name', 'universe'])
             ->withCount('lessons')
-            ->orderBy('sort_order')
             ->latest('published_at')
-            ->get()
-            ->map(fn (Course $course) => $course->card());
+            ->paginate(9)
+            ->withQueryString();
+
+        // One query for every course's progress rather than one per course.
+        $completed = $user
+            ? LessonProgress::where('user_id', $user->id)
+                ->whereNotNull('completed_at')
+                ->whereIn('course_id', $courses->pluck('id'))
+                ->selectRaw('course_id, COUNT(*) as finished')
+                ->groupBy('course_id')
+                ->pluck('finished', 'course_id')
+            : collect();
 
         return Inertia::render('courses/index', [
-            'courses' => $courses,
-        ])->withViewData(['seo' => Seo::forPage(
-            'Tutorials',
-            'Multi-part learning paths you can leave and come back to — with a contents panel that remembers where you were.',
-            route('courses.index'),
-        )]);
+            'courses' => $courses->through(fn (Course $course) => CoursePresenter::card(
+                $course,
+                $course->lessons_count,
+                (int) ($completed[$course->id] ?? 0),
+            )),
+            'ads' => Ads::forRequest($request, 'feed'),
+        ]);
     }
 
     public function show(Request $request, Course $course): Response
     {
-        abort_unless($this->readable($request, $course), 404);
+        $this->authorize('view', $course);
+
+        $course->load(['persona.universe', 'persona.customTheme', 'persona.user', 'universe', 'user']);
+        $modules = $course->modules()->with('lessons')->get();
+        $lessons = CoursePresenter::readingOrder($modules);
+
+        $completedIds = $this->completedIds($request, $course);
+        $seo = Seo::forCourse($course, $lessons->count());
 
         return Inertia::render('courses/show', [
-            'course' => $course->card(),
-            'outline' => $this->outline($request, $course),
-        ])->withViewData(['seo' => Seo::forPage(
-            $course->title,
-            $course->description ?? $course->subtitle ?? '',
-            route('courses.show', $course),
-            $course->cover_image,
-        )]);
-    }
-
-    public function lesson(Request $request, Course $course, Post $lesson): Response
-    {
-        abort_unless($this->readable($request, $course), 404);
-
-        // The lesson must belong to *this* course. Without this a crafted URL
-        // could pair any course with any lesson, which is both wrong and an
-        // information leak once courses can be unpublished.
-        abort_unless(
-            $lesson->isLesson() && $lesson->courseModule?->course_id === $course->id,
-            404
-        );
-
-        $outline = $this->outline($request, $course);
-
-        // Flatten once to find neighbours, so "next lesson" is not another query.
-        $flat = collect($outline)->flatMap(fn (array $module) => $module['lessons'])->values();
-        $position = $flat->search(fn (array $item) => $item['slug'] === $lesson->slug);
-
-        $lesson->loadCount('highlights');
-
-        return Inertia::render('courses/lesson', [
-            'course' => $course->card(),
-            'outline' => $outline,
-            'lesson' => [
-                'slug' => $lesson->slug,
-                'title' => $lesson->title,
-                'body' => $lesson->body,
-                'reading_time' => $lesson->reading_time,
-                'marks' => $lesson->highlights_count,
-                'completed' => $request->user()
-                    ? LessonProgress::where('user_id', $request->user()->id)
-                        ->where('post_id', $lesson->id)
-                        ->whereNotNull('completed_at')
-                        ->exists()
-                    : false,
+            'course' => [
+                ...CoursePresenter::card($course, $lessons->count(), $completedIds->count()),
+                'estimated_minutes' => $course->estimatedMinutes($lessons),
+                // What is left, not what it costs in total — the number a
+                // returning reader actually wants.
+                'remaining_minutes' => (int) $lessons
+                    ->reject(fn (Post $lesson) => $completedIds->contains($lesson->id))
+                    ->sum(fn (Post $lesson) => max(1, (int) $lesson->reading_time)),
+                'is_complete' => $lessons->isNotEmpty() && $completedIds->count() >= $lessons->count(),
+                'can' => [
+                    'update' => $request->user()?->can('update', $course) ?? false,
+                ],
             ],
-            'position' => [
-                'index' => $position === false ? 0 : $position + 1,
-                'total' => $flat->count(),
-                'previous' => $position > 0 ? $flat[$position - 1] : null,
-                'next' => $position !== false && $position + 1 < $flat->count() ? $flat[$position + 1] : null,
-            ],
-            // Marks and responses work here unchanged — a lesson is a post.
-            'marked' => $lesson->markedPassages(),
-            'highlights' => $request->user()
-                ? $lesson->highlights()->where('user_id', $request->user()->id)
-                    ->get(['id', 'block_index', 'start_offset', 'end_offset', 'quote'])
-                : [],
-            'ads' => Ads::forRequest($request, 'post'),
-        ])->withViewData(['seo' => Seo::forPage(
-            $lesson->title,
-            HtmlSanitizer::excerpt($lesson->body, 155),
-            route('courses.lesson', [$course, $lesson]),
-            $course->cover_image,
-        )]);
-    }
-
-    /** Mark a lesson done, or undo it. Reader-asserted, never inferred. */
-    public function progress(Request $request, Course $course, Post $lesson): RedirectResponse
-    {
-        abort_unless(
-            $lesson->isLesson() && $lesson->courseModule?->course_id === $course->id,
-            404
-        );
-
-        $progress = LessonProgress::firstOrNew([
-            'user_id' => $request->user()->id,
-            'post_id' => $lesson->id,
-        ]);
-
-        $progress->completed_at = $progress->completed_at ? null : now();
-        $progress->save();
-
-        return back();
+            'outline' => CoursePresenter::outline($course, $modules, $completedIds),
+            // Where "Continue" should go: the first unfinished lesson, or the
+            // start if nothing is done yet.
+            'resume' => $this->resumeUrl($course, $lessons, $completedIds),
+            'universe' => UniverseContext::serialize($course->universe, $request->user(), $course->persona),
+            'ads' => Ads::forRequest($request, 'feed'),
+            'seo' => $seo,
+        ])->withViewData(['seo' => $seo]);
     }
 
     /**
-     * The contents panel: modules, their lessons, and this reader's progress.
-     *
-     * Three queries regardless of course size — modules with lessons eager
-     * loaded, plus one lookup of the reader's completed ids. Building it
-     * per-lesson would be an N+1 on the single most-visited page of a course.
-     *
-     * @return array<int, array<string, mixed>>
+     * One lesson, with the contents panel beside it.
      */
-    private function outline(Request $request, Course $course): array
+    public function lesson(Request $request, Course $course, string $lesson): Response
     {
-        $modules = $course->modules()->with(['lessons' => function ($query) {
-            $query->publishedLessons()->orderBy('sort_order');
-        }])->get();
+        $this->authorize('view', $course);
 
-        $completed = $request->user()
-            ? LessonProgress::where('user_id', $request->user()->id)
-                ->whereNotNull('completed_at')
-                ->pluck('post_id')
-                ->flip()
-            : collect();
+        $course->load(['persona.universe', 'persona.customTheme', 'persona.user', 'universe']);
+        $modules = $course->modules()->with('lessons')->get();
+        $order = CoursePresenter::readingOrder($modules);
 
-        return $modules->map(fn ($module) => [
-            'title' => $module->title,
-            'summary' => $module->summary,
-            'lessons' => $module->lessons->map(fn (Post $lesson) => [
-                'slug' => $lesson->slug,
-                'title' => $lesson->title,
-                'reading_time' => $lesson->reading_time,
-                'completed' => $completed->has($lesson->id),
-            ])->values()->all(),
-        ])->values()->all();
+        $current = $order->firstWhere('slug', $lesson);
+
+        abort_if($current === null, 404);
+
+        $user = $request->user();
+        $completedIds = $this->completedIds($request, $course);
+        $index = $order->search(fn (Post $candidate) => $candidate->id === $current->id);
+
+        $seo = Seo::forLesson($course, $current);
+
+        return Inertia::render('courses/lesson', [
+            'course' => CoursePresenter::card($course, $order->count(), $completedIds->count()),
+            'outline' => CoursePresenter::outline($course, $modules, $completedIds, $current->id),
+            'lesson' => [
+                'id' => $current->id,
+                'slug' => $current->slug,
+                'title' => $current->title,
+                'body' => StoryBlocks::expand($current->body),
+                'reading_time' => $current->reading_time,
+                'completed' => $completedIds->contains($current->id),
+                'number' => $index + 1,
+                'total' => $order->count(),
+            ],
+            'previous' => $this->neighbour($course, $order, $index - 1),
+            'next' => $this->neighbour($course, $order, $index + 1),
+
+            'progress' => [
+                'done' => $completedIds->count(),
+                'total' => $order->count(),
+                // Excludes this lesson when it is already finished, so the
+                // number does not jump backwards on marking it done.
+                'remaining_minutes' => (int) $order
+                    ->reject(fn (Post $lesson) => $completedIds->contains($lesson->id) || $lesson->id === $current->id)
+                    ->sum(fn (Post $lesson) => max(1, (int) $lesson->reading_time)),
+                // True once marking *this* lesson would finish the course.
+                'finishes_course' => ! $completedIds->contains($current->id)
+                    && $completedIds->count() + 1 >= $order->count(),
+            ],
+
+            // The marking layer, identical in shape to a post page — the
+            // Readable component is shared, so the payload must be too.
+            'passages' => $current->markedPassages()->map(fn ($passage) => [
+                'block_index' => (int) $passage->block_index,
+                'start_offset' => (int) $passage->start_offset,
+                'end_offset' => (int) $passage->end_offset,
+                'quote' => $passage->quote,
+                'marks' => (int) $passage->marks,
+            ]),
+            'myHighlights' => $user
+                ? $current->highlights()->where('user_id', $user->id)->get()
+                    ->map(fn ($highlight) => [
+                        'id' => $highlight->id,
+                        'block_index' => $highlight->block_index,
+                        'start_offset' => $highlight->start_offset,
+                        'end_offset' => $highlight->end_offset,
+                    ])
+                : [],
+
+            'universe' => UniverseContext::serialize($course->universe, $user, $course->persona),
+            'seo' => $seo,
+        ])->withViewData(['seo' => $seo]);
     }
 
-    /** Drafts stay visible to their author and nobody else — same rule as posts. */
-    private function readable(Request $request, Course $course): bool
+    /**
+     * Mark a lesson finished, or unfinished again.
+     *
+     * Toggling rather than one-way: someone who marks the wrong row, or wants
+     * to redo a section, should not be stuck with a progress bar that lies.
+     */
+    public function toggleProgress(Request $request, Course $course, string $lesson): RedirectResponse
     {
-        return $course->status === 'published'
-            && $course->published_at !== null
-            && $course->published_at <= now()
-            || $request->user()?->id === $course->user_id;
+        $this->authorize('view', $course);
+
+        $post = $course->lessons()->where('posts.slug', $lesson)->firstOrFail();
+
+        $record = LessonProgress::firstOrNew([
+            'user_id' => $request->user()->id,
+            'post_id' => $post->id,
+        ]);
+
+        $record->course_id = $course->id;
+        $record->completed_at = $record->completed_at ? null : now();
+        $record->save();
+
+        return back()->with('success', $record->completed_at ? 'Marked as done.' : 'Marked as unread.');
+    }
+
+    /**
+     * Lesson ids this reader has finished.
+     *
+     * @return Collection<int, int>
+     */
+    private function completedIds(Request $request, Course $course): Collection
+    {
+        $user = $request->user();
+
+        if (! $user) {
+            return collect();
+        }
+
+        return LessonProgress::where('user_id', $user->id)
+            ->where('course_id', $course->id)
+            ->whereNotNull('completed_at')
+            ->pluck('post_id');
+    }
+
+    /** @param  Collection<int, Post>  $order */
+    private function neighbour(Course $course, Collection $order, int $index): ?array
+    {
+        $lesson = $order->get($index);
+
+        return $lesson ? [
+            'title' => $lesson->title,
+            'url' => route('courses.lesson', [$course, $lesson], absolute: false),
+        ] : null;
+    }
+
+    /** @param  Collection<int, Post>  $lessons */
+    private function resumeUrl(Course $course, Collection $lessons, Collection $completedIds): ?array
+    {
+        $next = $lessons->first(fn (Post $lesson) => ! $completedIds->contains($lesson->id))
+            ?? $lessons->first();
+
+        if (! $next) {
+            return null;
+        }
+
+        return [
+            'title' => $next->title,
+            'url' => route('courses.lesson', [$course, $next], absolute: false),
+            'restarting' => $completedIds->count() === $lessons->count() && $lessons->isNotEmpty(),
+        ];
     }
 }

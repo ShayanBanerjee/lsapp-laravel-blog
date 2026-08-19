@@ -7,21 +7,26 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Integration extends Model
 {
-    protected $fillable = ['user_id', 'service', 'token', 'settings', 'last_synced_at', 'last_error'];
+    protected $fillable = ['user_id', 'provider', 'credentials', 'settings', 'verified_at', 'last_used_at'];
 
     /**
-     * `encrypted` on the token, and `hidden` so it cannot be serialized into an
-     * Inertia page by accident — the connection status is the reader's
-     * business, the credential is not.
+     * Credentials never appear in a serialized model.
+     *
+     * The connection list is sent to the browser, and a token that reaches the
+     * page — even inside a prop nothing renders — is a token in the DOM, in the
+     * history state, and in anything that logs a response.
+     *
+     * @var list<string>
      */
-    protected $hidden = ['token'];
+    protected $hidden = ['credentials'];
 
     protected function casts(): array
     {
         return [
-            'token' => 'encrypted',
+            'credentials' => 'encrypted:array',
             'settings' => 'array',
-            'last_synced_at' => 'datetime',
+            'verified_at' => 'datetime',
+            'last_used_at' => 'datetime',
         ];
     }
 

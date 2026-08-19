@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Models\Scopes\StandalonePostScope;
 use Database\Factories\PostFactory;
+use Illuminate\Database\Eloquent\Attributes\ScopedBy;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -12,15 +14,23 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 
+/**
+ * A piece of writing.
+ *
+ * A Post with a `course_module_id` is a **lesson** inside a course rather than
+ * standalone writing. StandalonePostScope hides those from every query by
+ * default — see that class for why the default runs that way round.
+ */
+#[ScopedBy([StandalonePostScope::class])]
 class Post extends Model
 {
     /** @use HasFactory<PostFactory> */
     use HasFactory;
 
     protected $fillable = [
-        'user_id', 'persona_id', 'universe_id', 'slug', 'title',
-        'excerpt', 'body', 'cover_image', 'status', 'reading_time', 'published_at',
-        'kind', 'course_module_id', 'sort_order',
+        'user_id', 'persona_id', 'universe_id', 'course_module_id', 'position',
+        'slug', 'title', 'excerpt', 'body', 'cover_image', 'status',
+        'reading_time', 'published_at',
     ];
 
     protected function casts(): array
@@ -46,6 +56,42 @@ class Post extends Model
     public function universe(): BelongsTo
     {
         return $this->belongsTo(Universe::class);
+    }
+
+    public function courseModule(): BelongsTo
+    {
+        return $this->belongsTo(CourseModule::class);
+    }
+
+    /** True when this post is a lesson rather than standalone writing. */
+    public function isLesson(): bool
+    {
+        return $this->course_module_id !== null;
+    }
+
+    /**
+     * Where this post is actually read.
+     *
+     * Standalone writing lives at /posts/{slug}; a lesson lives inside its
+     * course and 404s at that URL, because StandalonePostScope hides it from
+     * the `{post}` binding. Anything redirecting to "the post" must go through
+     * here or it will send lessons to a dead page.
+     */
+    public function readUrl(): string
+    {
+        if (! $this->isLesson()) {
+            return route('posts.show', $this, absolute: false);
+        }
+
+        $module = $this->relationLoaded('courseModule')
+            ? $this->courseModule
+            : $this->courseModule()->with('course')->first();
+
+        $course = $module?->relationLoaded('course') ? $module->course : $module?->course()->first();
+
+        return $course
+            ? route('courses.lesson', [$course, $this], absolute: false)
+            : route('courses.index', absolute: false);
     }
 
     public function highlights(): HasMany
@@ -119,47 +165,11 @@ class Post extends Model
         return $this->cover_image !== null && ! str_starts_with($this->cover_image, '/');
     }
 
-    /**
-     * Published standalone pieces.
-     *
-     * Lessons are excluded here rather than at each call site. Every public
-     * listing — feed, sitemap, RSS, universe, subject, circle, home — goes
-     * through this one scope, so a lesson cannot leak into a listing where it
-     * would appear stranded, out of its course and out of sequence. Course
-     * pages ask for lessons explicitly.
-     *
-     * @param  Builder<Post>  $query
-     */
     public function scopePublished(Builder $query): Builder
     {
-        return $query->where('kind', 'piece')
-            ->where('status', 'published')
+        return $query->where('status', 'published')
             ->whereNotNull('published_at')
             ->where('published_at', '<=', now());
-    }
-
-    /** @param  Builder<Post>  $query */
-    public function scopePublishedLessons(Builder $query): Builder
-    {
-        return $query->where('kind', 'lesson')
-            ->where('status', 'published')
-            ->whereNotNull('published_at')
-            ->where('published_at', '<=', now());
-    }
-
-    public function isLesson(): bool
-    {
-        return $this->kind === 'lesson';
-    }
-
-    public function courseModule(): BelongsTo
-    {
-        return $this->belongsTo(CourseModule::class);
-    }
-
-    public function lessonProgress(): HasMany
-    {
-        return $this->hasMany(LessonProgress::class);
     }
 
     public function isPublished(): bool

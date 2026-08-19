@@ -2,23 +2,17 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\FingerprintPost;
+use App\Models\CopyFlag;
 use App\Models\Persona;
 use App\Models\Post;
 use App\Models\Universe;
 use App\Models\User;
-use App\Support\CopyDetection;
 use Database\Seeders\UniverseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
-/**
- * Near-duplicate detection.
- *
- * The property under test is not "identical text matches" — an exact hash does
- * that. It is that the score survives the edits someone actually makes when
- * passing off another person's work: reordered sentences, swapped words,
- * changed punctuation and casing.
- */
 class CopyDetectionTest extends TestCase
 {
     use RefreshDatabase;
@@ -29,177 +23,232 @@ class CopyDetectionTest extends TestCase
         $this->seed(UniverseSeeder::class);
     }
 
-    private const ORIGINAL = 'The nearest star other than our own is four light years out, which means the light landing on your face tonight left before you had the thought that made you look up. There is no way to see the present at a distance. Every telescope is a time machine pointed the wrong way, and the further it reaches the older the news it brings back to you.';
-
-    private function makePost(string $body, string $slug): Post
+    /** Long enough to clear the minimum-length floor. */
+    private function original(): string
     {
-        $author = User::factory()->create();
+        return '<p>The tide goes out further here than anywhere else on this coast, and what it leaves behind is a landscape '
+            .'that exists for six hours at a time. Channels that will be a river by evening are footpaths at noon.</p>'
+            .'<p>People who live here read the water the way other people read a timetable, and they are never wrong twice. '
+            .'The ones who get caught are always visitors, and they are always caught in the same place, on the same bar, '
+            .'by the same channel filling behind them while they look at the horizon.</p>';
+    }
+
+    private function unrelated(): string
+    {
+        return '<p>Compilers spend most of their time in the middle end, and most of the interesting decisions are made there. '
+            .'Register allocation is the part everyone remembers, but instruction selection is where the real losses are.</p>'
+            .'<p>A good pass ordering will beat a clever individual pass almost every time, which is an unsatisfying result '
+            .'for anyone who wanted to write the clever pass. The compiler does not care how interesting your algorithm was.</p>';
+    }
+
+    /** @return array{0: User, 1: Persona} */
+    private function writer(string $handle): array
+    {
+        $user = User::factory()->create();
         $persona = Persona::create([
-            'user_id' => $author->id,
+            'user_id' => $user->id,
             'universe_id' => Universe::where('slug', 'cosmos')->value('id'),
-            'handle' => 'writer'.$author->id,
-            'display_name' => 'Writer',
+            'handle' => $handle,
+            'display_name' => ucfirst($handle),
         ]);
 
-        return Post::create([
-            'user_id' => $author->id,
+        return [$user, $persona];
+    }
+
+    private function publish(User $user, Persona $persona, string $slug, string $body): Post
+    {
+        $post = Post::create([
+            'user_id' => $user->id,
             'persona_id' => $persona->id,
             'universe_id' => $persona->universe_id,
             'slug' => $slug,
-            'title' => 'A Piece '.$slug,
-            'body' => '<p>'.$body.'</p>',
+            'title' => ucfirst(str_replace('-', ' ', $slug)),
+            'body' => $body,
             'status' => 'published',
-            'published_at' => now(),
+            'published_at' => now()->subMinute(),
         ]);
+
+        // Queue is sync in tests, so this runs inline.
+        FingerprintPost::dispatch($post->id);
+
+        return $post;
     }
 
-    public function test_an_identical_body_is_flagged(): void
+    public function test_a_verbatim_repost_is_flagged(): void
     {
-        CopyDetection::check($this->makePost(self::ORIGINAL, 'original'));
+        [$authorA, $personaA] = $this->writer('original');
+        [$authorB, $personaB] = $this->writer('copier');
 
-        $flags = CopyDetection::check($this->makePost(self::ORIGINAL, 'copy'));
+        $first = $this->publish($authorA, $personaA, 'the-tide', $this->original());
+        $second = $this->publish($authorB, $personaB, 'the-tide-again', $this->original());
 
-        $this->assertCount(1, $flags);
-        $this->assertSame(100, $flags->first()->containment);
+        $flag = CopyFlag::where('post_id', $second->id)->first();
+
+        $this->assertNotNull($flag, 'a verbatim repost should be flagged');
+        $this->assertSame($first->id, $flag->matched_post_id);
+        $this->assertSame(CopyFlag::DUPLICATE, $flag->kind);
     }
 
-    /** Casing and punctuation are free to change and carry no meaning. */
-    public function test_a_reformatted_copy_is_still_flagged(): void
+    public function test_a_copied_passage_inside_original_work_is_flagged(): void
     {
-        CopyDetection::check($this->makePost(self::ORIGINAL, 'original'));
+        [$authorA, $personaA] = $this->writer('original');
+        [$authorB, $personaB] = $this->writer('copier');
 
-        $reformatted = strtoupper(str_replace([',', '.'], ['', ' —'], self::ORIGINAL));
+        $first = $this->publish($authorA, $personaA, 'the-tide', $this->original());
 
-        $flags = CopyDetection::check($this->makePost($reformatted, 'reformatted'));
+        // Their own opening, then two lifted paragraphs. SimHash alone would
+        // miss this — that is what the shingle index is for.
+        $mixed = '<p>I went back to the estuary last spring, mostly to see whether the path was still there.</p>'
+            .$this->original();
 
-        $this->assertCount(1, $flags, 'a reformatted copy escaped detection');
+        $second = $this->publish($authorB, $personaB, 'back-to-the-estuary', $mixed);
+
+        $flag = CopyFlag::where('post_id', $second->id)->first();
+
+        $this->assertNotNull($flag, 'a lifted passage should be flagged');
+        $this->assertSame($first->id, $flag->matched_post_id);
+        $this->assertGreaterThan(0.3, $flag->similarity);
     }
 
-    /** The whole reason for a locality-sensitive hash rather than an exact one. */
-    public function test_a_lightly_edited_copy_is_still_flagged(): void
+    public function test_unrelated_work_is_not_flagged(): void
     {
-        CopyDetection::check($this->makePost(self::ORIGINAL, 'original'));
+        [$authorA, $personaA] = $this->writer('original');
+        [$authorB, $personaB] = $this->writer('other');
 
-        $edited = str_replace(
-            ['nearest star', 'time machine', 'telescope'],
-            ['closest star', 'time device', 'lens'],
-            self::ORIGINAL,
-        );
+        $this->publish($authorA, $personaA, 'the-tide', $this->original());
+        $this->publish($authorB, $personaB, 'the-middle-end', $this->unrelated());
 
-        $flags = CopyDetection::check($this->makePost($edited, 'edited'));
-
-        $this->assertCount(1, $flags, 'a lightly edited copy escaped detection');
+        $this->assertDatabaseCount('copy_flags', 0);
     }
 
-    public function test_unrelated_writing_is_not_flagged(): void
+    public function test_reusing_your_own_words_is_not_flagged(): void
     {
-        CopyDetection::check($this->makePost(self::ORIGINAL, 'original'));
+        [$author, $persona] = $this->writer('serial');
 
-        $other = 'Moss does not race, it occupies. There is a difference between growth that competes for a place and growth that simply outlasts everything else standing in it, and the north wall of a house is where you can watch the second kind win over a single wet autumn.';
+        $this->publish($author, $persona, 'the-tide', $this->original());
+        $this->publish($author, $persona, 'the-tide-revisited', $this->original());
 
-        $flags = CopyDetection::check($this->makePost($other, 'unrelated'));
-
-        $this->assertCount(0, $flags);
+        $this->assertDatabaseCount('copy_flags', 0);
     }
 
-    /** Two short pieces sharing a stock phrase must not flag each other. */
+    public function test_drafts_are_neither_indexed_nor_compared(): void
+    {
+        [$author, $persona] = $this->writer('drafter');
+
+        $draft = Post::create([
+            'user_id' => $author->id,
+            'persona_id' => $persona->id,
+            'universe_id' => $persona->universe_id,
+            'slug' => 'unfinished',
+            'title' => 'Unfinished',
+            'body' => $this->original(),
+            'status' => 'draft',
+        ]);
+
+        FingerprintPost::dispatch($draft->id);
+
+        $this->assertDatabaseCount('post_fingerprints', 0);
+        $this->assertDatabaseCount('post_shingles', 0);
+    }
+
     public function test_very_short_pieces_are_not_fingerprinted(): void
     {
-        $flags = CopyDetection::check($this->makePost('Thanks for reading.', 'short'));
+        [$author, $persona] = $this->writer('brief');
 
-        $this->assertCount(0, $flags);
+        $this->publish($author, $persona, 'a-note', '<p>Back soon.</p>');
+
         $this->assertDatabaseCount('post_fingerprints', 0);
     }
 
-    /** Nothing is ever removed or blocked automatically. */
-    public function test_a_flagged_piece_stays_published_and_readable(): void
+    public function test_editing_a_piece_reindexes_it(): void
     {
-        CopyDetection::check($this->makePost(self::ORIGINAL, 'original'));
-        $copy = $this->makePost(self::ORIGINAL, 'copy');
-        CopyDetection::check($copy);
+        [$authorA, $personaA] = $this->writer('original');
+        [$authorB, $personaB] = $this->writer('reformed');
 
-        $this->get('/posts/copy')->assertOk();
-        $this->assertSame('published', $copy->fresh()->status);
-        $this->assertDatabaseHas('duplicate_flags', ['post_id' => $copy->id, 'status' => 'pending']);
+        $this->publish($authorA, $personaA, 'the-tide', $this->original());
+        $copy = $this->publish($authorB, $personaB, 'the-tide-again', $this->original());
+
+        $this->assertDatabaseCount('copy_flags', 1);
+
+        // Rewritten into genuinely different work; the old shingles must go.
+        $copy->update(['body' => $this->unrelated()]);
+        FingerprintPost::dispatch($copy->id);
+
+        $shingles = DB::table('post_shingles')->where('post_id', $copy->id)->count();
+        $this->assertGreaterThan(0, $shingles);
+
+        // The stale flag remains for review — it is a record of what was
+        // published — but no second flag is raised for the new body.
+        $this->assertDatabaseCount('copy_flags', 1);
     }
 
-    public function test_publishing_through_the_editor_fingerprints_the_piece(): void
+    public function test_publishing_through_the_editor_indexes_the_piece(): void
     {
-        $author = User::factory()->create();
-        $persona = Persona::create([
-            'user_id' => $author->id,
-            'universe_id' => Universe::where('slug', 'cosmos')->value('id'),
-            'handle' => 'writerx',
-            'display_name' => 'Writer',
-        ]);
+        [$author, $persona] = $this->writer('writer');
 
         $this->actingAs($author)->post('/posts', [
+            'title' => 'The tide',
+            'body' => $this->original(),
             'persona_id' => $persona->id,
-            'title' => 'A New Piece',
-            'body' => '<p>'.self::ORIGINAL.'</p>',
             'status' => 'published',
-        ])->assertRedirect();
+        ])->assertSessionHasNoErrors();
 
         $this->assertDatabaseCount('post_fingerprints', 1);
     }
 
-    /** A draft cannot have been copied from, so it is not fingerprinted. */
-    public function test_drafts_are_not_fingerprinted(): void
+    public function test_flags_are_visible_only_to_the_author_they_concern(): void
     {
-        $author = User::factory()->create();
-        $persona = Persona::create([
-            'user_id' => $author->id,
-            'universe_id' => Universe::where('slug', 'cosmos')->value('id'),
-            'handle' => 'writery',
-            'display_name' => 'Writer',
-        ]);
+        [$authorA, $personaA] = $this->writer('original');
+        [$authorB, $personaB] = $this->writer('copier');
 
-        $this->actingAs($author)->post('/posts', [
-            'persona_id' => $persona->id,
-            'title' => 'A Draft',
-            'body' => '<p>'.self::ORIGINAL.'</p>',
-            'status' => 'draft',
-        ])->assertRedirect();
+        $this->publish($authorA, $personaA, 'the-tide', $this->original());
+        $this->publish($authorB, $personaB, 'the-tide-again', $this->original());
+
+        // The flag belongs to the second writer's desk…
+        $this->actingAs($authorB)->get('/dashboard')
+            ->assertInertia(fn ($page) => $page->has('copyFlags', 1));
+
+        // …and the first writer is deliberately told nothing. A similarity
+        // score is not evidence, and routing it to the other party as a
+        // notification would make it one.
+        $this->actingAs($authorA)->get('/dashboard')
+            ->assertInertia(fn ($page) => $page->has('copyFlags', 0));
+
+        $this->assertDatabaseCount('alerts', 0);
+    }
+
+    public function test_a_writer_can_dismiss_a_flag_on_their_own_piece_and_no_one_elses(): void
+    {
+        [$authorA, $personaA] = $this->writer('original');
+        [$authorB, $personaB] = $this->writer('copier');
+
+        $this->publish($authorA, $personaA, 'the-tide', $this->original());
+        $this->publish($authorB, $personaB, 'the-tide-again', $this->original());
+
+        $flag = CopyFlag::firstOrFail();
+
+        $this->actingAs($authorA)->post("/copy-flags/{$flag->id}/clear")->assertForbidden();
+        $this->assertSame(CopyFlag::OPEN, $flag->fresh()->status);
+
+        $this->actingAs($authorB)->post("/copy-flags/{$flag->id}/clear")->assertRedirect();
+        $this->assertSame(CopyFlag::CLEARED, $flag->fresh()->status);
+
+        // Dismissed flags leave the desk but stay on the record.
+        $this->actingAs($authorB)->get('/dashboard')
+            ->assertInertia(fn ($page) => $page->has('copyFlags', 0));
+        $this->assertDatabaseCount('copy_flags', 1);
+    }
+
+    public function test_deleting_a_piece_removes_it_from_the_index(): void
+    {
+        [$author, $persona] = $this->writer('writer');
+        $post = $this->publish($author, $persona, 'the-tide', $this->original());
+
+        $this->assertDatabaseCount('post_fingerprints', 1);
+
+        $this->actingAs($author)->delete("/posts/{$post->slug}");
 
         $this->assertDatabaseCount('post_fingerprints', 0);
-    }
-
-    /**
-     * A copied paragraph inside an otherwise original piece.
-     *
-     * This is the case SimHash could not see at all, and the reason this uses
-     * containment rather than Jaccard — by Jaccard the pair scores 0.26, which
-     * is indistinguishable from noise.
-     */
-    public function test_a_single_lifted_paragraph_is_flagged(): void
-    {
-        CopyDetection::check($this->makePost(self::ORIGINAL, 'original'));
-
-        $partial = 'A completely different opening paragraph about something else entirely, written from scratch. '
-            .'Every telescope is a time machine pointed the wrong way, and the further it reaches the older the news it brings back to you. '
-            .'And then a different closing thought that has nothing to do with any of the above.';
-
-        $flags = CopyDetection::check($this->makePost($partial, 'partial'));
-
-        $this->assertCount(1, $flags, 'a lifted paragraph escaped detection');
-    }
-
-    /** Editing a piece must not leave it matching phrases it no longer has. */
-    public function test_rewriting_a_piece_clears_its_old_shingles(): void
-    {
-        $post = $this->makePost(self::ORIGINAL, 'original');
-        CopyDetection::check($post);
-
-        $before = \DB::table('post_shingles')->where('post_id', $post->id)->count();
-
-        $post->update(['body' => '<p>Moss does not race, it occupies, and the north wall of a house is where you can watch that kind of growth outlast everything else standing in it over a single wet autumn season.</p>']);
-        CopyDetection::check($post->fresh());
-
-        $after = \DB::table('post_shingles')->where('post_id', $post->id)->count();
-
-        $this->assertGreaterThan(0, $after);
-        // Nothing from the old body survives.
-        $this->assertSame(0, CopyDetection::check($this->makePost(self::ORIGINAL, 'fresh-original'))->count());
-        $this->assertNotSame($before, $after);
+        $this->assertDatabaseCount('post_shingles', 0);
     }
 }

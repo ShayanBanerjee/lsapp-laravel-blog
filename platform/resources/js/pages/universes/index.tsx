@@ -43,7 +43,7 @@ export default function UniversesIndex({ universes }: { universes: UniversePrevi
                             </p>
                         </div>
                         <Link href={auth.user ? '/upgrade' : '/register'} className="u-btn u-btn-primary px-5 py-2.5">
-                            {auth.user ? 'Unlock all six' : 'Create an account'}
+                            {auth.user ? 'Unlock every world' : 'Create an account'}
                         </Link>
                     </div>
                 </Panel>

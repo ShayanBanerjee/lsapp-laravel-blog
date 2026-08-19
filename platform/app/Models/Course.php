@@ -2,18 +2,22 @@
 
 namespace App\Models;
 
+use App\Models\Scopes\StandalonePostScope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 
 class Course extends Model
 {
+    public const LEVELS = ['beginner', 'intermediate', 'advanced'];
+
     protected $fillable = [
-        'slug', 'title', 'subtitle', 'description', 'user_id', 'persona_id',
-        'universe_id', 'cover_image', 'level', 'status', 'published_at', 'sort_order',
+        'user_id', 'persona_id', 'universe_id', 'slug', 'title', 'subtitle',
+        'description', 'cover_image', 'level', 'status', 'published_at',
     ];
 
     protected function casts(): array
@@ -43,16 +47,30 @@ class Course extends Model
 
     public function modules(): HasMany
     {
-        return $this->hasMany(CourseModule::class)->orderBy('sort_order');
+        return $this->hasMany(CourseModule::class)->orderBy('position');
     }
 
-    /** Every lesson in the course, flattened — used for counts and ordering. */
+    /**
+     * Every lesson in the course, in reading order.
+     *
+     * The standalone scope is removed here for the same reason it exists —
+     * this is the query that has explicitly asked for lessons.
+     *
+     * @return HasManyThrough<Post, CourseModule, $this>
+     */
     public function lessons(): HasManyThrough
     {
-        return $this->hasManyThrough(Post::class, CourseModule::class, 'course_id', 'course_module_id');
+        return $this->hasManyThrough(Post::class, CourseModule::class, 'course_id', 'course_module_id')
+            ->withoutGlobalScope(StandalonePostScope::class)
+            ->orderBy('course_modules.position')
+            ->orderBy('posts.position');
     }
 
-    /** @param  Builder<Course>  $query */
+    public function progress(): HasMany
+    {
+        return $this->hasMany(LessonProgress::class);
+    }
+
     public function scopePublished(Builder $query): Builder
     {
         return $query->where('status', 'published')
@@ -60,6 +78,14 @@ class Course extends Model
             ->where('published_at', '<=', now());
     }
 
+    public function isPublished(): bool
+    {
+        return $this->status === 'published'
+            && $this->published_at !== null
+            && $this->published_at->lte(now());
+    }
+
+    /** Same two shapes as Post::coverUrl — uploads and bundled seed imagery. */
     public function coverUrl(): ?string
     {
         if (! $this->cover_image) {
@@ -71,22 +97,20 @@ class Course extends Model
             : Storage::disk('public')->url($this->cover_image);
     }
 
-    /** @return array<string, mixed> */
-    public function card(): array
+    public function hasUploadedCover(): bool
     {
-        return [
-            'slug' => $this->slug,
-            'title' => $this->title,
-            'subtitle' => $this->subtitle,
-            'description' => $this->description,
-            'level' => $this->level,
-            'cover_url' => $this->coverUrl(),
-            'lessons_count' => $this->lessons_count ?? null,
-            'universe' => $this->relationLoaded('universe') ? $this->universe?->preview() : null,
-            'persona' => $this->relationLoaded('persona') && $this->persona ? [
-                'handle' => $this->persona->handle,
-                'display_name' => $this->persona->display_name,
-            ] : null,
-        ];
+        return $this->cover_image !== null && ! str_starts_with($this->cover_image, '/');
+    }
+
+    /**
+     * How long the whole path takes, summed from the lessons themselves rather
+     * than typed in by the author — a hand-entered estimate goes stale the
+     * first time a lesson is edited.
+     *
+     * @param  Collection<int, Post>  $lessons
+     */
+    public function estimatedMinutes(Collection $lessons): int
+    {
+        return max(1, (int) $lessons->sum(fn (Post $lesson) => max(1, (int) $lesson->reading_time)));
     }
 }

@@ -2,8 +2,8 @@ import { Chip, EmptyState, Panel, SectionHeading, Swatch } from '@/components/me
 import { useCountUp } from '@/hooks/use-motion';
 import SiteLayout from '@/layouts/site-layout';
 import type { PostCard, SharedData } from '@/types';
-import { Head, Link, usePage } from '@inertiajs/react';
-import { Clock, Mail, MailWarning, PenLine, Pencil } from 'lucide-react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
+import { Banknote, Clock, Mail, PenLine, Pencil, TriangleAlert } from 'lucide-react';
 
 interface MarkedPassage {
     slug: string;
@@ -12,14 +12,23 @@ interface MarkedPassage {
     marks: number;
 }
 
+interface CopyFlagRow {
+    id: number;
+    kind: 'containment' | 'duplicate';
+    similarity: number;
+    post: { slug: string | null; title: string | null };
+    matched: { slug: string | null; title: string | null; handle: string | null };
+}
+
 interface Props {
     posts: PostCard[];
     stats: { published: number; drafts: number; personas: number; following: number };
     markedPassages: MarkedPassage[];
     unreadLetters: number;
+    copyFlags: CopyFlagRow[];
 }
 
-export default function Dashboard({ posts, stats, markedPassages = [], unreadLetters = 0 }: Props) {
+export default function Dashboard({ posts, stats, markedPassages = [], unreadLetters = 0, copyFlags = [] }: Props) {
     const { auth } = usePage<SharedData>().props;
 
     return (
@@ -32,21 +41,6 @@ export default function Dashboard({ posts, stats, markedPassages = [], unreadLet
                     Everything you've written, across every persona.
                 </p>
             </header>
-
-            {auth.user && auth.user.email_verified_at === null && (
-                <Panel className="mb-12 flex flex-wrap items-center gap-5 p-6">
-                    <MailWarning className="size-6 shrink-0" style={{ color: 'var(--u-accent)' }} />
-                    <div className="min-w-0 flex-1">
-                        <h2 className="text-lg font-semibold">Confirm your email to publish</h2>
-                        <p className="mt-1 text-sm" style={{ color: 'var(--u-text-muted)' }}>
-                            Reading, marking and saving all work already. Writing waits until we know the address is yours.
-                        </p>
-                    </div>
-                    <Link href={route('verification.notice')} className="u-btn u-btn-primary">
-                        Verify email
-                    </Link>
-                </Panel>
-            )}
 
             <div className="mb-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {[
@@ -83,6 +77,88 @@ export default function Dashboard({ posts, stats, markedPassages = [], unreadLet
                 </section>
             )}
 
+            <Panel className="mb-12 flex flex-wrap items-center gap-5 p-6">
+                <Banknote className="size-6 shrink-0" style={{ color: 'var(--u-accent)' }} />
+                <div className="min-w-0 flex-1">
+                    <h2 className="text-lg font-semibold">Readers can pay you directly</h2>
+                    <p className="mt-1 text-sm leading-relaxed" style={{ color: 'var(--u-text-muted)' }}>
+                        Tips on a piece, or a monthly membership in one of your voices. You keep 75% — we pay the card fees out of our share, not
+                        yours.
+                    </p>
+                </div>
+                <Link href="/earnings" className="u-btn u-btn-primary">
+                    Your earnings
+                </Link>
+            </Panel>
+
+            {copyFlags.length > 0 && (
+                <Panel className="mb-12 p-6">
+                    <div className="flex items-start gap-4">
+                        <TriangleAlert className="mt-0.5 size-5 shrink-0" style={{ color: '#f0a04b' }} />
+                        <div className="min-w-0 flex-1">
+                            <h2 className="text-lg font-semibold">
+                                {copyFlags.length === 1
+                                    ? 'One piece looks close to something else'
+                                    : `${copyFlags.length} pieces look close to something else`}
+                            </h2>
+                            {/*
+                              Deliberately phrased as a question, not a charge.
+                              This is a similarity measurement, and only the
+                              writer can say whether it is a quotation, a
+                              republished draft, or a problem.
+                            */}
+                            <p className="mt-1 text-sm leading-relaxed" style={{ color: 'var(--u-text-muted)' }}>
+                                Only you can see this. Often it is a long quotation or something you republished — dismiss it if so.
+                            </p>
+
+                            <ul className="mt-5 flex flex-col gap-3">
+                                {copyFlags.map((flag) => (
+                                    <li
+                                        key={flag.id}
+                                        className="flex flex-wrap items-center gap-3 rounded-[9px] border p-3"
+                                        style={{ borderColor: 'var(--u-border)' }}
+                                    >
+                                        <span className="min-w-0 flex-1 text-sm">
+                                            {flag.post.slug ? (
+                                                <Link href={`/posts/${flag.post.slug}`} className="font-medium">
+                                                    {flag.post.title}
+                                                </Link>
+                                            ) : (
+                                                <span className="font-medium">{flag.post.title}</span>
+                                            )}
+                                            <span style={{ color: 'var(--u-text-muted)' }}>
+                                                {' '}
+                                                {flag.kind === 'duplicate' ? 'is substantially the same as' : 'shares passages with'}{' '}
+                                            </span>
+                                            {flag.matched.slug ? (
+                                                <Link href={`/posts/${flag.matched.slug}`} className="font-medium">
+                                                    {flag.matched.title}
+                                                </Link>
+                                            ) : (
+                                                <span className="font-medium">{flag.matched.title}</span>
+                                            )}
+                                            {flag.matched.handle && <span style={{ color: 'var(--u-text-muted)' }}> by @{flag.matched.handle}</span>}
+                                        </span>
+
+                                        <span className="shrink-0 text-xs tabular-nums" style={{ color: 'var(--u-text-muted)' }}>
+                                            {Math.round(flag.similarity * 100)}%
+                                        </span>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => router.post(`/copy-flags/${flag.id}/clear`, {}, { preserveScroll: true })}
+                                            className="u-btn u-btn-ghost px-3 py-1 text-xs"
+                                        >
+                                            Dismiss
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    </div>
+                </Panel>
+            )}
+
             {unreadLetters > 0 && (
                 <Panel className="mb-12 flex flex-wrap items-center gap-5 p-6">
                     <Mail className="size-6 shrink-0" style={{ color: 'var(--u-accent)' }} />
@@ -105,7 +181,7 @@ export default function Dashboard({ posts, stats, markedPassages = [], unreadLet
                     <div className="min-w-0 flex-1">
                         <h2 className="text-lg font-semibold">You're on the free plan</h2>
                         <p className="mt-1 text-sm" style={{ color: 'var(--u-text-muted)' }}>
-                            Two universes and one persona. Premium opens all six worlds and unlimited personas.
+                            Two universes and one persona. Premium opens every world and unlimited personas.
                         </p>
                     </div>
                     <Link href="/upgrade" className="u-btn u-btn-primary">

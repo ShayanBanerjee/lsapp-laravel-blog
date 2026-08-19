@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\ProfileUpdateRequest;
+use App\Support\Academic\Orcid;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -21,6 +22,15 @@ class ProfileController extends Controller
         return Inertia::render('settings/profile', [
             'mustVerifyEmail' => $request->user() instanceof MustVerifyEmail,
             'status' => $request->session()->get('status'),
+            // A verified researcher identity, shown on exports and deposits.
+            // Absent entirely when the integration is not configured, rather
+            // than offering a button that 503s.
+            'orcid' => [
+                'available' => Orcid::isConfigured(),
+                'id' => $request->user()->orcid_id,
+                'name' => $request->user()->orcid_name,
+                'linked_human' => $request->user()->orcid_linked_at?->format('j M Y'),
+            ],
         ]);
     }
 

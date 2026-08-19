@@ -1,13 +1,20 @@
 <?php
 
+use App\Http\Controllers\AlertController;
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\CircleController;
+use App\Http\Controllers\CopyFlagController;
+use App\Http\Controllers\CourseAuthorController;
 use App\Http\Controllers\CourseController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeepFieldController;
+use App\Http\Controllers\DepositController;
+use App\Http\Controllers\EarningsController;
+use App\Http\Controllers\ExportController;
 use App\Http\Controllers\FeedController;
 use App\Http\Controllers\FollowController;
+use App\Http\Controllers\FollowingFeedController;
 use App\Http\Controllers\HighlightController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\IntegrationController;
@@ -15,11 +22,12 @@ use App\Http\Controllers\LetterController;
 use App\Http\Controllers\LibraryController;
 use App\Http\Controllers\PersonaController;
 use App\Http\Controllers\PostController;
+use App\Http\Controllers\ProfileViewController;
 use App\Http\Controllers\ResponseController;
-use App\Http\Controllers\ThemeController;
+use App\Http\Controllers\StudioController;
+use App\Http\Controllers\SupportController;
 use App\Http\Controllers\UniverseController;
 use App\Http\Controllers\UpgradeController;
-use App\Http\Controllers\WriterController;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\Route;
 
@@ -44,35 +52,35 @@ Route::resource('posts', PostController::class)
     ->only(['index', 'show'])
     ->parameters(['posts' => 'post']);
 
+/*
+ * Taking a piece out of the platform. Reading is public, so the citation and
+ * Markdown formats are too — see ExportController for which are the author's
+ * alone.
+ */
+Route::get('posts/{post}/export/{format}', [ExportController::class, 'show'])->name('posts.export');
+
 Route::get('upgrade', [UpgradeController::class, 'show'])->name('upgrade.show');
 
 Route::get('categories', [CategoryController::class, 'index'])->name('categories.index');
 Route::get('categories/{category}', [CategoryController::class, 'show'])->name('categories.show');
 
+/*
+ * Courses. `create` is declared ahead of the {course} slug route so it is not
+ * swallowed by slug matching, exactly as posts do.
+ */
+Route::get('courses', [CourseController::class, 'index'])->name('courses.index');
+
 Route::get('circles', [CircleController::class, 'index'])->name('circles.index');
 Route::get('circles/{circle}', [CircleController::class, 'show'])->name('circles.show');
 
 /*
- * Learning paths. Reading them is public like everything else; only recording
- * progress needs an account, because progress is per-reader by definition.
+ * Public persona profiles.
+ *
+ * The `@` prefix keeps handles in their own namespace, so a new top-level page
+ * can never collide with someone's name — and the reserved-word list in
+ * App\Support\Handles is belt to this braces.
  */
-Route::get('learn', [CourseController::class, 'index'])->name('courses.index');
-Route::get('learn/{course}', [CourseController::class, 'show'])->name('courses.show');
-Route::get('learn/{course}/{lesson}', [CourseController::class, 'lesson'])->name('courses.lesson');
-
-/*
- * Writer profiles. Public and readable by anyone, like everything else on the
- * reading side. Shows what they wrote and which sentences landed — never a
- * follower count.
- */
-Route::get('writers/{persona}', [WriterController::class, 'show'])->name('writers.show');
-
-/*
- * Vanity URL. Declared last in this file so it can never shadow a real route —
- * the `@` prefix makes a collision impossible anyway, which is exactly why it
- * is there rather than bare `/{handle}`.
- */
-Route::get('@{persona}', [WriterController::class, 'show'])->name('writers.vanity');
+Route::get('@{persona}', [ProfileViewController::class, 'show'])->name('profiles.show');
 
 // The Deep Field — one continuous descent through all six universes.
 Route::get('deep-field', DeepFieldController::class)->name('deep-field');
@@ -85,23 +93,47 @@ Route::post('billing/webhook', [BillingController::class, 'webhook'])
 Route::middleware(['auth'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
 
-    /*
-     * Writing is gated on a verified address. Reading, marking, saving and
-     * following are not — that half of the product is free by design, and
-     * gating it would cost us readers in order to inconvenience spammers, who
-     * are not readers.
-     *
-     * `posts.destroy` sits deliberately outside the gate: taking your own work
-     * down must never require clearing an administrative hurdle first.
-     */
-    Route::middleware('verified')->group(function () {
-        Route::get('posts/{post}/edit', [PostController::class, 'edit'])->name('posts.edit');
-        Route::get('write', [PostController::class, 'create'])->name('posts.create');
-        Route::post('posts', [PostController::class, 'store'])->name('posts.store');
-        Route::put('posts/{post}', [PostController::class, 'update'])->name('posts.update');
-    });
-
+    Route::get('posts/{post}/edit', [PostController::class, 'edit'])->name('posts.edit');
+    Route::get('write', [PostController::class, 'create'])->name('posts.create');
+    Route::post('posts', [PostController::class, 'store'])->name('posts.store');
+    Route::put('posts/{post}', [PostController::class, 'update'])->name('posts.update');
     Route::delete('posts/{post}', [PostController::class, 'destroy'])->name('posts.destroy');
+
+    // Authoring. Declared before the public slug routes are reached because
+    // they live in this group, which is matched first.
+    Route::get('courses/new', [CourseAuthorController::class, 'create'])->name('courses.create');
+    Route::post('courses', [CourseAuthorController::class, 'store'])->name('courses.store');
+    Route::get('courses/{course}/edit', [CourseAuthorController::class, 'edit'])->name('courses.edit');
+    Route::post('courses/{course}', [CourseAuthorController::class, 'update'])->name('courses.update');
+    Route::delete('courses/{course}', [CourseAuthorController::class, 'destroy'])->name('courses.destroy');
+    Route::post('courses/{course}/reorder', [CourseAuthorController::class, 'reorder'])->name('courses.reorder');
+
+    Route::post('courses/{course}/modules', [CourseAuthorController::class, 'storeModule'])->name('courses.modules.store');
+    Route::put('courses/{course}/modules/{module}', [CourseAuthorController::class, 'updateModule'])->name('courses.modules.update');
+    Route::delete('courses/{course}/modules/{module}', [CourseAuthorController::class, 'destroyModule'])->name('courses.modules.destroy');
+
+    Route::post('courses/{course}/modules/{module}/lessons', [CourseAuthorController::class, 'storeLesson'])->name('courses.lessons.store');
+    Route::put('courses/{course}/modules/{module}/lessons/{lesson}', [CourseAuthorController::class, 'updateLesson'])->name('courses.lessons.update');
+    Route::delete('courses/{course}/modules/{module}/lessons/{lesson}', [CourseAuthorController::class, 'destroyLesson'])->name('courses.lessons.destroy');
+
+    Route::post('courses/{course}/{lesson}/progress', [CourseController::class, 'toggleProgress'])->name('courses.progress');
+
+    // Zenodo deposit. Creates a draft only — minting the DOI is done on
+    // Zenodo, deliberately not from here.
+    // Cross-posting. Every destination creates a draft, never a live post.
+    Route::post('posts/{post}/share/{provider}', [IntegrationController::class, 'publish'])->name('posts.crosspost');
+
+    /*
+     * The research studio. Nothing here submits to a publisher — see
+     * App\Support\Academic\Venues\Venue for why that is not possible — it
+     * prepares the package a human uploads.
+     */
+    Route::get('posts/{post}/studio', [StudioController::class, 'show'])->name('posts.studio');
+    Route::get('posts/{post}/studio/{venue}', [StudioController::class, 'download'])->name('posts.studio.download');
+
+    Route::post('posts/{post}/deposit', [DepositController::class, 'store'])->name('posts.deposit');
+
+    Route::post('copy-flags/{flag}/clear', [CopyFlagController::class, 'clear'])->name('copy-flags.clear');
 
     Route::get('personas', [PersonaController::class, 'index'])->name('personas.index');
     Route::post('personas', [PersonaController::class, 'store'])->name('personas.store');
@@ -119,45 +151,28 @@ Route::middleware(['auth'])->group(function () {
     Route::post('circles/{circle}/membership', [CircleController::class, 'toggle'])->name('circles.toggle');
     Route::get('letters', [LetterController::class, 'index'])->name('letters.index');
 
-    Route::post('learn/{course}/{lesson}/progress', [CourseController::class, 'progress'])
-        ->name('courses.progress');
+    // The read side of follows: what the people and worlds you follow published.
+    Route::get('following', FollowingFeedController::class)->name('following');
 
     /*
-     * Outside tools. Export needs no account anywhere and works immediately;
-     * service connections are inert until the reader supplies their own token.
+     * Reader → writer money. Rate limited with the prose limiter: these create
+     * pending charges, and a hot loop of them is abuse rather than generosity.
      */
-    // The custom theme editor — premium, and gated server-side like the
-    // universe token sets it layers over.
-    Route::get('settings/theme', [ThemeController::class, 'edit'])->name('theme.edit');
-    Route::post('settings/theme', [ThemeController::class, 'store'])->name('theme.store');
-    Route::post('settings/theme/{theme}/activate', [ThemeController::class, 'activate'])->name('theme.activate');
-    Route::delete('settings/theme/active', [ThemeController::class, 'deactivate'])->name('theme.deactivate');
-    Route::delete('settings/theme/{theme}', [ThemeController::class, 'destroy'])->name('theme.destroy');
+    Route::middleware('throttle:prose')->group(function () {
+        Route::post('posts/{post}/tip', [SupportController::class, 'tip'])->name('support.tip');
+        Route::post('personas/{persona}/membership', [SupportController::class, 'subscribe'])->name('support.subscribe');
+    });
 
-    Route::get('settings/integrations', [IntegrationController::class, 'index'])->name('integrations.index');
-    Route::post('settings/integrations', [IntegrationController::class, 'connect'])->name('integrations.connect');
-    Route::delete('settings/integrations/{service}', [IntegrationController::class, 'disconnect'])->name('integrations.disconnect');
-    Route::post('settings/integrations/sync', [IntegrationController::class, 'sync'])->name('integrations.sync');
+    Route::delete('personas/{persona}/membership', [SupportController::class, 'cancel'])->name('support.cancel');
 
-    Route::get('posts/{post}/export.md', [IntegrationController::class, 'exportPost'])->name('posts.export');
-    Route::get('posts/{post}/highlights.md', [IntegrationController::class, 'exportHighlights'])->name('posts.export.highlights');
+    Route::get('earnings', [EarningsController::class, 'index'])->name('earnings.index');
+    Route::post('earnings/withdraw', [EarningsController::class, 'withdraw'])->name('earnings.withdraw');
 
-    /*
-     * Manuscript formats and deposit. Not "submit to IEEE" — that has no API
-     * and could not work; this is the file their portal asks for, plus Zenodo,
-     * which does mint a real DOI.
-     */
-    Route::get('posts/{post}/manuscript.tex', [IntegrationController::class, 'exportLatex'])->name('posts.export.latex');
-    Route::get('posts/{post}/manuscript.docx', [IntegrationController::class, 'exportDocx'])->name('posts.export.docx');
-    Route::post('posts/{post}/deposit', [IntegrationController::class, 'deposit'])->name('posts.deposit');
-    Route::post('settings/citation', [IntegrationController::class, 'citation'])->name('integrations.citation');
-
-    Route::get('following', [WriterController::class, 'following'])->name('writers.following');
-    Route::get('notifications', [WriterController::class, 'notifications'])->name('writers.notifications');
-    Route::delete('notifications', [WriterController::class, 'clear'])->name('writers.notifications.clear');
+    Route::get('activity', [AlertController::class, 'index'])->name('alerts.index');
+    Route::post('activity/read', [AlertController::class, 'readAll'])->name('alerts.read');
 
     Route::get('library', [LibraryController::class, 'index'])->name('library.index');
-    Route::post('posts/{post}/bookmark', [LibraryController::class, 'toggle'])->name('library.toggle');
+    Route::post('posts/{readable}/bookmark', [LibraryController::class, 'toggle'])->name('library.toggle');
 
     /*
      * User-generated content endpoints are rate limited.
@@ -167,17 +182,27 @@ Route::middleware(['auth'])->group(function () {
      * that is where spam and abuse actually arrive.
      */
     Route::middleware('throttle:marks')->group(function () {
-        Route::post('posts/{post}/highlights', [HighlightController::class, 'store'])->name('highlights.store');
+        Route::post('posts/{readable}/highlights', [HighlightController::class, 'store'])->name('highlights.store');
         Route::delete('highlights/{highlight}', [HighlightController::class, 'destroy'])->name('highlights.destroy');
     });
 
-    Route::middleware(['verified', 'throttle:prose'])->group(function () {
-        Route::post('posts/{post}/responses', [ResponseController::class, 'store'])->name('responses.store');
-        Route::post('posts/{post}/letters', [LetterController::class, 'store'])->name('letters.store');
+    Route::middleware('throttle:prose')->group(function () {
+        Route::post('posts/{readable}/responses', [ResponseController::class, 'store'])->name('responses.store');
+        Route::post('posts/{readable}/letters', [LetterController::class, 'store'])->name('letters.store');
     });
 
     Route::delete('responses/{response}', [ResponseController::class, 'destroy'])->name('responses.destroy');
 });
+
+/*
+ * Course slug routes are registered last on purpose.
+ *
+ * `{course}` and `{lesson}` are wildcards that would otherwise swallow
+ * `courses/new` and `courses/{course}/edit`, since Laravel matches in
+ * registration order. Anything more specific must come first.
+ */
+Route::get('courses/{course}', [CourseController::class, 'show'])->name('courses.show');
+Route::get('courses/{course}/{lesson}', [CourseController::class, 'lesson'])->name('courses.lesson');
 
 require __DIR__.'/settings.php';
 require __DIR__.'/auth.php';

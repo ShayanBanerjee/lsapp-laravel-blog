@@ -1,10 +1,10 @@
-import { STORY_KINDS, StoryBlock, type StoryKind } from '@/components/story-blocks';
+import { STORY_KINDS, STORY_NODES, linesToSteps, stepsToLines } from '@/lib/story-nodes';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
 import { EditorContent, useEditor, type Editor as TiptapEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import { Bold, Clapperboard, Code, Heading2, Heading3, Italic, Link2, List, ListOrdered, Quote, Redo2, Strikethrough, Undo2 } from 'lucide-react';
-import type { ComponentType } from 'react';
+import { Bold, Clapperboard, Code, Heading2, Heading3, Italic, Link2, List, ListOrdered, Quote, Redo2, Strikethrough, Undo2, X } from 'lucide-react';
+import { useState, type ComponentType } from 'react';
 
 /**
  * Replaces the legacy CKEditor integration.
@@ -18,7 +18,9 @@ export function Editor({ value, onChange }: { value: string; onChange: (html: st
             StarterKit.configure({ heading: { levels: [2, 3, 4] } }),
             Placeholder.configure({ placeholder: 'Begin where the world begins…' }),
             Link.configure({ openOnClick: false, autolink: true }),
-            StoryBlock,
+            // Storytelling blocks. These serialise to the same compact
+            // <figure data-story="…"> the server validates and expands.
+            ...STORY_NODES,
         ],
         content: value,
         onUpdate: ({ editor }) => onChange(editor.getHTML()),
@@ -124,57 +126,138 @@ function Toolbar({ editor }: { editor: TiptapEditor }) {
 }
 
 /**
- * Storytelling blocks. A plain <details> rather than a popover component —
- * it needs no state, closes on its own, and is keyboard-operable for free.
+ * Inserting a storytelling block.
+ *
+ * A small form rather than an in-canvas editor: these blocks are a handful of
+ * scalar fields, and asking for them plainly is clearer than a WYSIWYG surface
+ * that has to explain that you cannot type inside the image.
  */
 function StoryMenu({ editor }: { editor: TiptapEditor }) {
+    const [open, setOpen] = useState(false);
+    const [kind, setKind] = useState<(typeof STORY_KINDS)[number] | null>(null);
+    const [values, setValues] = useState<Record<string, string>>({});
+
+    const close = () => {
+        setOpen(false);
+        setKind(null);
+        setValues({});
+    };
+
+    const insert = () => {
+        if (!kind) return;
+
+        const attributes: Record<string, string> = {};
+
+        kind.fields.forEach((field) => {
+            const raw = values[field.key] ?? '';
+            attributes[field.key] = field.key === 'steps' ? linesToSteps(raw) : raw.trim();
+        });
+
+        editor.chain().focus().insertContent({ type: kind.node, attrs: attributes }).run();
+        close();
+    };
+
     return (
-        <details className="relative">
-            <summary
-                className="flex cursor-pointer list-none items-center gap-1.5 rounded-[7px] p-2 text-xs transition-colors"
-                style={{ color: 'var(--u-text-muted)' }}
+        <>
+            <button
+                type="button"
+                onClick={() => setOpen(true)}
                 title="Insert a storytelling block"
+                aria-label="Insert a storytelling block"
+                className="flex items-center gap-1.5 rounded-[7px] px-2.5 py-2 text-xs transition-colors"
+                style={{ color: 'var(--u-text-muted)' }}
             >
                 <Clapperboard className="size-4" />
                 Story block
-            </summary>
+            </button>
 
-            <div
-                className="absolute top-full left-0 z-20 mt-1 w-64 rounded-[10px] border p-1.5 shadow-lg"
-                style={{ borderColor: 'var(--u-border)', background: 'var(--u-surface-1)' }}
-            >
-                {STORY_KINDS.map(({ kind, label, hint }) => (
+            {open && (
+                <div className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto p-6 sm:p-12">
                     <button
-                        key={kind}
                         type="button"
-                        onClick={() => insert(editor, kind)}
-                        className="block w-full rounded-[7px] px-2.5 py-2 text-left transition-colors hover:bg-[var(--u-surface-2)]"
+                        aria-label="Close"
+                        onClick={close}
+                        className="absolute inset-0"
+                        style={{ backgroundColor: 'color-mix(in srgb, var(--u-bg-deep) 82%, transparent)' }}
+                    />
+
+                    <div
+                        className="relative w-full max-w-lg rounded-[14px] border p-6"
+                        style={{ backgroundColor: 'var(--u-surface-1)', borderColor: 'var(--u-border)' }}
                     >
-                        <span className="block text-sm">{label}</span>
-                        <span className="block text-xs" style={{ color: 'var(--u-text-muted)' }}>
-                            {hint}
-                        </span>
-                    </button>
-                ))}
-            </div>
-        </details>
+                        <div className="mb-5 flex items-start justify-between gap-4">
+                            <div>
+                                <h2 className="font-display text-xl">Add a story block</h2>
+                                <p className="mt-1 text-xs" style={{ color: 'var(--u-text-muted)' }}>
+                                    These behave the same for every reader, and degrade to plain text for anyone who has asked for less motion.
+                                </p>
+                            </div>
+                            <button type="button" onClick={close} aria-label="Close" className="u-btn u-btn-ghost px-2 py-1">
+                                <X className="size-4" />
+                            </button>
+                        </div>
+
+                        {kind === null ? (
+                            <div className="flex flex-col gap-2">
+                                {STORY_KINDS.map((option) => (
+                                    <button
+                                        key={option.node}
+                                        type="button"
+                                        onClick={() => setKind(option)}
+                                        className="rounded-[9px] border p-3 text-left transition-colors"
+                                        style={{ borderColor: 'var(--u-border)' }}
+                                    >
+                                        <span className="block text-sm font-medium">{option.label}</span>
+                                        <span className="mt-0.5 block text-xs" style={{ color: 'var(--u-text-muted)' }}>
+                                            {option.hint}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="flex flex-col gap-4">
+                                {kind.fields.map((field) => (
+                                    <label key={field.key} className="flex flex-col gap-1.5">
+                                        <span
+                                            className="text-[11px] font-semibold tracking-[0.16em] uppercase"
+                                            style={{ color: 'var(--u-text-muted)' }}
+                                        >
+                                            {field.label}
+                                        </span>
+                                        {'multiline' in field && field.multiline ? (
+                                            <textarea
+                                                rows={4}
+                                                value={stepsToLines(values[field.key] ?? '')}
+                                                onChange={(event) => setValues((current) => ({ ...current, [field.key]: event.target.value }))}
+                                                placeholder={field.placeholder}
+                                                className="u-field"
+                                            />
+                                        ) : (
+                                            <input
+                                                value={values[field.key] ?? ''}
+                                                onChange={(event) => setValues((current) => ({ ...current, [field.key]: event.target.value }))}
+                                                placeholder={field.placeholder}
+                                                className="u-field"
+                                            />
+                                        )}
+                                    </label>
+                                ))}
+
+                                <div className="mt-2 flex gap-2">
+                                    <button type="button" onClick={insert} className="u-btn u-btn-primary">
+                                        Insert {kind.label.toLowerCase()}
+                                    </button>
+                                    <button type="button" onClick={() => setKind(null)} className="u-btn u-btn-ghost">
+                                        Back
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+        </>
     );
-}
-
-function insert(editor: TiptapEditor, kind: StoryKind) {
-    if (kind === 'callout') {
-        const value = window.prompt('The number or figure to show large', '68%');
-
-        if (value === null) return;
-
-        const label = window.prompt('A short label beneath it (optional)', '') ?? '';
-
-        editor.chain().focus().setStoryBlock(kind).updateAttributes('storyBlock', { value, label }).run();
-
-        return;
-    }
-
-    editor.chain().focus().setStoryBlock(kind).run();
 }
 
 function Divider() {

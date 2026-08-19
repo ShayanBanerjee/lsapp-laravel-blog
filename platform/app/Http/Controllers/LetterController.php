@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\Letter;
 use App\Models\Post;
+use App\Support\Alerts;
 use App\Support\HtmlSanitizer;
+use App\Support\UniverseContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -43,24 +45,31 @@ class LetterController extends Controller
         return Inertia::render('letters/index', ['letters' => $letters]);
     }
 
-    public function store(Request $request, Post $post): RedirectResponse
+    public function store(Request $request, Post $readable): RedirectResponse
     {
-        $this->authorize('view', $post);
+        $this->authorize('view', $readable);
 
         $data = $request->validate([
             'body' => ['required', 'string', 'min:4', 'max:2000'],
         ]);
 
-        if ($post->user_id === $request->user()->id) {
+        if ($readable->user_id === $request->user()->id) {
             return back()->with('error', 'That one is already yours.');
         }
 
-        Letter::create([
-            'post_id' => $post->id,
+        $letter = Letter::create([
+            'post_id' => $readable->id,
             'from_user_id' => $request->user()->id,
-            'to_user_id' => $post->user_id,
+            'to_user_id' => $readable->user_id,
             'body' => HtmlSanitizer::plain($data['body'], 2000),
         ]);
+
+        Alerts::letterReceived(
+            $readable->user_id,
+            $request->user(),
+            UniverseContext::activePersona($request),
+            $letter->body,
+        );
 
         return back()->with('success', 'Your letter is on its way.');
     }

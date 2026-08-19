@@ -6,24 +6,33 @@ import { useUniverse } from '@/hooks/use-universe';
 import { cn } from '@/lib/utils';
 import type { SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { Menu, PenLine, X } from 'lucide-react';
+import { Bell, Menu, PenLine, X } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
 const NAV = [
     { label: 'Read', href: '/posts' },
     { label: 'Universes', href: '/universes' },
+    { label: 'Courses', href: '/courses' },
     { label: 'Subjects', href: '/categories' },
-    { label: 'Tutorials', href: '/learn' },
     { label: 'Circles', href: '/circles' },
     { label: 'Deep Field', href: '/deep-field' },
 ];
 
 export default function SiteLayout({ children, wide = false }: { children: ReactNode; wide?: boolean }) {
-    const { auth, url, unreadNotifications } = usePage<SharedData>().props as SharedData & { url?: string };
-    const unread = unreadNotifications ?? 0;
+    const page = usePage<SharedData>();
+    const { auth, unreadAlerts = 0, universeIndex = [] } = page.props;
     const universe = useUniverse();
     const [menuOpen, setMenuOpen] = useState(false);
-    const current = typeof window !== 'undefined' ? window.location.pathname : (url ?? '');
+
+    /*
+     * The current path comes from Inertia, not from window.
+     *
+     * Reading window here behind a `typeof` guard would still be wrong under
+     * SSR — the server would render one nav item highlighted and the browser
+     * another, which is a hydration mismatch rather than a crash, and those are
+     * the ones nobody notices.
+     */
+    const current = page.url.split('?')[0];
 
     return (
         <UniverseRoot className="flex min-h-screen flex-col">
@@ -39,7 +48,7 @@ export default function SiteLayout({ children, wide = false }: { children: React
                     </Link>
 
                     <nav className="ml-6 hidden items-center gap-1 md:flex">
-                        {NAV.map((item) => (
+                        {(auth.user ? [NAV[0], { label: 'Following', href: '/following' }, ...NAV.slice(1)] : NAV).map((item) => (
                             <Link
                                 key={item.href}
                                 href={item.href}
@@ -63,23 +72,24 @@ export default function SiteLayout({ children, wide = false }: { children: React
                         {auth.user ? (
                             <>
                                 <PersonaSwitcher />
+                                <Link
+                                    href="/activity"
+                                    className="u-btn u-btn-ghost relative"
+                                    aria-label={unreadAlerts > 0 ? `Activity, ${unreadAlerts} unread` : 'Activity'}
+                                >
+                                    <Bell className="size-4" />
+                                    {unreadAlerts > 0 && (
+                                        <span
+                                            className="absolute -top-1 -right-1 flex min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] leading-[18px] font-semibold tabular-nums"
+                                            style={{ backgroundColor: 'var(--u-accent)', color: 'var(--u-accent-fg)' }}
+                                        >
+                                            {unreadAlerts > 99 ? '99+' : unreadAlerts}
+                                        </span>
+                                    )}
+                                </Link>
                                 <Link href="/write" className="u-btn u-btn-primary">
                                     <PenLine className="size-4" />
                                     Write
-                                </Link>
-                                <Link href="/following" className="u-btn u-btn-ghost">
-                                    Following
-                                </Link>
-                                <Link href="/notifications" className="u-btn u-btn-ghost relative" aria-label="What landed">
-                                    Landed
-                                    {unread > 0 && (
-                                        <span
-                                            className="ml-1 rounded-full px-1.5 py-0.5 text-[10px] leading-none tabular-nums"
-                                            style={{ background: 'var(--u-accent)', color: 'var(--u-accent-fg)' }}
-                                        >
-                                            {unread > 99 ? '99+' : unread}
-                                        </span>
-                                    )}
                                 </Link>
                                 <Link href="/library" className="u-btn u-btn-ghost" aria-label="Your library">
                                     Library
@@ -136,11 +146,23 @@ export default function SiteLayout({ children, wide = false }: { children: React
                                         <Link href="/dashboard" className="u-btn u-btn-ghost">
                                             Desk
                                         </Link>
+                                        <Link href="/following" className="u-btn u-btn-ghost">
+                                            Following
+                                        </Link>
+                                        <Link href="/activity" className="u-btn u-btn-ghost">
+                                            Activity{unreadAlerts > 0 && ` (${unreadAlerts})`}
+                                        </Link>
                                         <Link href="/personas" className="u-btn u-btn-ghost">
                                             Personas
                                         </Link>
+                                        <Link href="/earnings" className="u-btn u-btn-ghost">
+                                            Earnings
+                                        </Link>
                                         <Link href="/letters" className="u-btn u-btn-ghost">
                                             Letters
+                                        </Link>
+                                        <Link href="/settings/themes" className="u-btn u-btn-ghost">
+                                            Themes
                                         </Link>
                                         <Link href="/settings/reading" className="u-btn u-btn-ghost">
                                             Reading settings
@@ -172,15 +194,13 @@ export default function SiteLayout({ children, wide = false }: { children: React
                     style={{ color: 'var(--u-text-muted)' }}
                 >
                     <p>
-                        Inkfathom — a writing platform with six worlds.
+                        Inkfathom — a writing platform with {universeIndex.length} worlds.
                         {universe && <span className="ml-2 opacity-70">Currently in {universe.name}.</span>}
                     </p>
                     <div className="flex flex-wrap gap-5">
                         <Link href="/universes">Universes</Link>
+                        <Link href="/courses">Courses</Link>
                         <Link href="/categories">Subjects</Link>
-                        <Link href="/learn">Tutorials</Link>
-                        <Link href="/following">Following</Link>
-                        <Link href="/notifications">Landed</Link>
                         <Link href="/circles">Circles</Link>
                         <Link href="/deep-field">Deep Field</Link>
                         <Link href="/upgrade">Pricing</Link>

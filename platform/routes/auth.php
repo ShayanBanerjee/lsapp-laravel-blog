@@ -5,6 +5,7 @@ use App\Http\Controllers\Auth\ConfirmablePasswordController;
 use App\Http\Controllers\Auth\EmailVerificationNotificationController;
 use App\Http\Controllers\Auth\EmailVerificationPromptController;
 use App\Http\Controllers\Auth\NewPasswordController;
+use App\Http\Controllers\Auth\OrcidController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Auth\SocialAuthController;
@@ -68,4 +69,19 @@ Route::middleware('auth')->group(function () {
 
     Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])
         ->name('logout');
+
+    /*
+     * ORCID links a verified researcher identity to an existing account. It is
+     * inside the auth group on purpose — this is not a sign-in method, see
+     * OrcidController.
+     */
+    Route::get('auth/orcid/redirect', [OrcidController::class, 'redirect'])
+        ->middleware('throttle:auth')
+        ->name('orcid.redirect');
+
+    Route::get('auth/orcid/callback', [OrcidController::class, 'callback'])
+        ->middleware('throttle:auth')
+        ->name('orcid.callback');
+
+    Route::delete('auth/orcid', [OrcidController::class, 'destroy'])->name('orcid.destroy');
 });

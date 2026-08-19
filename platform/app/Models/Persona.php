@@ -15,7 +15,7 @@ class Persona extends Model
     use HasFactory;
 
     protected $fillable = [
-        'user_id', 'universe_id', 'handle', 'display_name',
+        'user_id', 'universe_id', 'custom_theme_id', 'handle', 'display_name',
         'bio', 'avatar_path', 'is_active',
     ];
 
@@ -39,6 +39,11 @@ class Persona extends Model
         return $this->belongsTo(Universe::class);
     }
 
+    public function customTheme(): BelongsTo
+    {
+        return $this->belongsTo(CustomTheme::class, 'custom_theme_id');
+    }
+
     public function posts(): HasMany
     {
         return $this->hasMany(Post::class);
@@ -47,5 +52,15 @@ class Persona extends Model
     public function followers(): MorphMany
     {
         return $this->morphMany(Follow::class, 'followable');
+    }
+
+    /**
+     * Published work, newest first — the public face of this voice.
+     *
+     * @return HasMany<Post, $this>
+     */
+    public function publishedPosts(): HasMany
+    {
+        return $this->posts()->published()->latest('published_at');
     }
 }

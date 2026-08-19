@@ -2,193 +2,173 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Integration;
+use App\Models\Highlight;
+use App\Models\Integration as Connection;
 use App\Models\Post;
-use App\Support\Integrations\Crossref;
-use App\Support\Integrations\ManuscriptExporter;
-use App\Support\Integrations\MarkdownExporter;
-use App\Support\Integrations\Readwise;
-use App\Support\Integrations\Zenodo;
+use App\Support\Academic\Manuscript;
+use App\Support\Integrations\IntegrationRegistry;
+use App\Support\Integrations\PublishesPosts;
+use App\Support\Integrations\ReceivesHighlights;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
- * Connections to outside tools.
+ * Connecting and using third-party services.
  *
- * Two shapes, and the difference is worth keeping straight: export works for
- * everyone right now with no account anywhere, while service connections are
- * inert until the reader supplies their own token. Advertising the second as
- * though it were the first is how a features page starts lying.
+ * Two rules run through all of it:
+ *
+ * - **Credentials are never sent back to the browser.** The model hides them,
+ *   and the connection list carries only which services are connected and when
+ *   they were last used. Re-connecting means re-entering the credential, which
+ *   is a small cost for never having a token in a page's props.
+ * - **Nothing is stored unverified.** A connection is written only after the
+ *   service has confirmed the credential works, so a failure surfaces here
+ *   rather than three weeks later against a finished piece.
  */
 class IntegrationController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(Request $request, IntegrationRegistry $registry): Response
     {
-        $user = $request->user();
-
-        $connections = Integration::where('user_id', $user->id)
-            ->get()
-            ->keyBy('service')
-            ->map(fn (Integration $integration) => [
-                'connected' => filled($integration->token),
-                'last_synced_human' => $integration->last_synced_at?->diffForHumans(),
-                'last_error' => $integration->last_error,
-            ]);
-
         return Inertia::render('settings/integrations', [
-            'connections' => $connections,
-            'markCount' => $user->highlights()->count(),
+            'catalogue' => $registry->catalogue(),
+            'connections' => $request->user()->integrations()
+                ->get()
+                ->map(fn (Connection $connection) => [
+                    'provider' => $connection->provider,
+                    'connected_human' => $connection->verified_at?->format('j M Y'),
+                    'last_used_human' => $connection->last_used_at?->diffForHumans(),
+                ])
+                ->keyBy('provider'),
+            // Obsidian is here rather than in the catalogue because it is not
+            // an API integration and pretending otherwise would be a lie.
+            'obsidian' => [
+                'label' => 'Obsidian',
+                'blurb' => 'Obsidian has no cloud API. Export any piece as Markdown — it carries YAML frontmatter a vault reads directly.',
+            ],
         ]);
     }
 
-    public function connect(Request $request): RedirectResponse
+    public function store(Request $request, IntegrationRegistry $registry, string $provider): RedirectResponse
     {
-        $validated = $request->validate([
-            'service' => ['required', Rule::in(['readwise', 'zenodo'])],
-            'token' => ['required', 'string', 'max:255'],
-        ]);
+        $integration = $registry->find($provider);
 
-        // Readwise exposes a cheap auth endpoint, so a typo fails at the point
-        // of entry. Zenodo has no equivalent; the first deposit is the check.
-        if ($validated['service'] === 'readwise' && ! Readwise::verify($validated['token'])) {
-            return back()->with('error', 'That token was not accepted by Readwise. Check it at readwise.io/access_token.');
-        }
+        abort_if($integration === null, 404);
 
-        Integration::updateOrCreate(
-            ['user_id' => $request->user()->id, 'service' => $validated['service']],
-            ['token' => $validated['token'], 'last_error' => null],
+        $expected = collect($integration->credentialFields())->pluck('key');
+
+        $data = $request->validate(
+            $expected->mapWithKeys(fn (string $key) => [
+                'credentials.'.$key => ['nullable', 'string', 'max:500'],
+            ])->all()
         );
 
-        return back()->with('success', 'Readwise connected.');
+        // Only the keys this provider declared — a crafted payload cannot store
+        // extra fields alongside the real ones.
+        $credentials = $expected
+            ->mapWithKeys(fn (string $key) => [$key => (string) ($data['credentials'][$key] ?? '')])
+            ->all();
+
+        $result = $integration->verify($credentials);
+
+        if (! $result->ok) {
+            return back()->withErrors(['credentials' => $result->message]);
+        }
+
+        $request->user()->integrations()->updateOrCreate(
+            ['provider' => $provider],
+            ['credentials' => $credentials, 'verified_at' => now()],
+        );
+
+        return back()->with('success', $result->message);
     }
 
-    public function disconnect(Request $request, string $service): RedirectResponse
+    public function destroy(Request $request, string $provider): RedirectResponse
     {
-        abort_unless(in_array($service, ['readwise', 'zenodo'], true), 404);
-
-        Integration::where('user_id', $request->user()->id)->where('service', $service)->delete();
+        $request->user()->integrations()->where('provider', $provider)->delete();
 
         return back()->with('success', 'Disconnected.');
     }
 
-    public function sync(Request $request): RedirectResponse
-    {
-        $sent = Readwise::push($request->user());
-
-        if ($sent === null) {
-            return back()->with('error', 'Readwise could not be reached. Nothing was lost — try again shortly.');
-        }
-
-        return back()->with('success', $sent === 0 ? 'No marks to send yet.' : "Sent {$sent} marks to Readwise.");
-    }
-
-    /**
-     * Download a piece as Markdown with YAML frontmatter.
-     *
-     * Streamed with a filename rather than rendered, because the point is a
-     * file that drops straight into a vault.
-     */
-    public function exportPost(Request $request, Post $post): StreamedResponse
-    {
-        $this->authorize('view', $post);
-
-        $post->load(['persona', 'universe', 'user', 'categories']);
-
-        return $this->download(
-            MarkdownExporter::forPost($post),
-            $post->slug.'.md',
-        );
-    }
-
-    /** A reader's own marks from one piece — the passages, not the article. */
-    public function exportHighlights(Request $request, Post $post): StreamedResponse
-    {
-        $this->authorize('view', $post);
-
-        $highlights = $post->highlights()
-            ->where('user_id', $request->user()->id)
-            ->orderBy('block_index')
-            ->orderBy('start_offset')
-            ->get(['quote']);
-
-        return $this->download(
-            MarkdownExporter::forHighlights($post, $highlights),
-            $post->slug.'-highlights.md',
-        );
-    }
-
-    /** IEEEtran LaTeX — the format the conference portals ask for. */
-    public function exportLatex(Request $request, Post $post): StreamedResponse
-    {
-        $this->authorize('view', $post);
-
-        $post->load(['persona', 'universe', 'user', 'categories']);
-
-        return $this->download(ManuscriptExporter::toLatex($post), $post->slug.'.tex', 'application/x-tex');
-    }
-
-    public function exportDocx(Request $request, Post $post): StreamedResponse
-    {
-        $this->authorize('view', $post);
-
-        $post->load(['persona', 'user']);
-
-        return $this->download(
-            ManuscriptExporter::toDocx($post),
-            $post->slug.'.docx',
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        );
-    }
-
-    /**
-     * Create a Zenodo draft deposit.
-     *
-     * Stops at the draft deliberately — publishing mints a permanent DOI, and
-     * that last irreversible step stays a human decision on Zenodo's own page.
-     */
-    public function deposit(Request $request, Post $post): RedirectResponse
+    /** Send one piece to a connected destination. */
+    public function publish(Request $request, IntegrationRegistry $registry, Post $post, string $provider): RedirectResponse
     {
         $this->authorize('update', $post);
 
-        $deposit = Zenodo::deposit($request->user(), $post->load(['persona', 'user']));
+        $integration = $registry->find($provider);
 
-        if ($deposit === null) {
-            return back()->with('error', 'Zenodo could not be reached, or no token is connected.');
+        abort_unless($integration instanceof PublishesPosts, 404);
+
+        $connection = $this->connection($request, $provider);
+
+        $post->loadMissing(['persona', 'user', 'categories']);
+
+        try {
+            $result = $integration->publish($connection->credentials, Manuscript::fromPost($post));
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return back()->with('error', $integration->label().' could not be reached.');
         }
 
-        return back()->with('success', 'Draft deposit created on Zenodo. Review and publish it there to mint the DOI: '.$deposit['url']);
+        $connection->forceFill(['last_used_at' => now()])->save();
+
+        return $result->ok
+            ? back()->with('success', $result->message.($result->url ? ' '.$result->url : ''))
+            : back()->with('error', $result->message);
     }
 
-    /** Turn a pasted DOI into a formed citation. Needs no credentials. */
-    public function citation(Request $request): RedirectResponse
+    /**
+     * Send this reader's own marks to a highlight service.
+     *
+     * Scoped to the requesting user's highlights only. Marks are visible in
+     * aggregate on a page, but "everything this person marked" is a reading
+     * history, and it belongs to them alone.
+     */
+    public function sendHighlights(Request $request, IntegrationRegistry $registry, string $provider): RedirectResponse
     {
-        $validated = $request->validate(['doi' => ['required', 'string', 'max:255']]);
+        $integration = $registry->find($provider);
 
-        $work = Crossref::lookup($validated['doi']);
+        abort_unless($integration instanceof ReceivesHighlights, 404);
 
-        if ($work === null) {
-            return back()->with('error', 'No record found for that DOI.');
+        $connection = $this->connection($request, $provider);
+
+        $highlights = Highlight::query()
+            ->where('highlights.user_id', $request->user()->id)
+            ->with(['post:id,slug,title,persona_id', 'post.persona:id,display_name'])
+            ->latest('highlights.created_at')
+            ->limit(1000)
+            ->get()
+            ->map(fn (Highlight $highlight) => [
+                'quote' => $highlight->quote,
+                'title' => $highlight->post?->title ?? 'Untitled',
+                'author' => $highlight->post?->persona?->display_name ?? config('app.name'),
+                'url' => $highlight->post ? route('posts.show', $highlight->post) : config('app.url'),
+                'marked_at' => $highlight->created_at?->toIso8601String(),
+            ]);
+
+        try {
+            $result = $integration->sendHighlights($connection->credentials, $highlights);
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return back()->with('error', $integration->label().' could not be reached.');
         }
 
-        return back()->with('success', trim(sprintf(
-            '%s (%s). %s. %s',
-            $work['authors'] ?: 'Unknown author',
-            $work['year'] ?? 'n.d.',
-            $work['title'],
-            $work['container'] ?? $work['url'],
-        )));
+        $connection->forceFill(['last_used_at' => now()])->save();
+
+        return $result->ok
+            ? back()->with('success', $result->message)
+            : back()->with('error', $result->message);
     }
 
-    private function download(string $body, string $filename, string $type = 'text/markdown; charset=UTF-8'): StreamedResponse
+    private function connection(Request $request, string $provider): Connection
     {
-        return response()->streamDownload(
-            fn () => print $body,
-            $filename,
-            ['Content-Type' => $type],
-        );
+        $connection = $request->user()->integrations()->where('provider', $provider)->first();
+
+        abort_if($connection === null, 403, 'That service is not connected.');
+
+        return $connection;
     }
 }

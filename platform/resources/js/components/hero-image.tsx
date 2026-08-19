@@ -2,10 +2,19 @@ import { useParallax } from '@/hooks/use-motion';
 import { cn } from '@/lib/utils';
 import type { ReactNode } from 'react';
 
+const CREDIT_CLASS =
+    'absolute right-3 bottom-3 rounded-full px-2.5 py-1 text-[10px] tracking-wide backdrop-blur-sm transition-opacity hover:opacity-100';
+
+const CREDIT_STYLE = {
+    color: 'var(--u-text-muted)',
+    backgroundColor: 'color-mix(in srgb, var(--u-bg) 55%, transparent)',
+    opacity: 0.7,
+} as const;
+
 /**
  * Full-bleed photographic hero with a parallax drift and a scrim that fades the
- * image into the universe's background colour, so the seam is invisible in all
- * six palettes.
+ * image into the universe's background colour, so the seam is invisible in
+ * every palette.
  */
 export function HeroImage({
     src,
@@ -45,17 +54,29 @@ export function HeroImage({
 
             {children}
 
-            {credit && (
-                <a
-                    href={`https://unsplash.com/@${credit.username}?utm_source=aetheris&utm_medium=referral`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="absolute right-3 bottom-3 rounded-full px-2.5 py-1 text-[10px] tracking-wide backdrop-blur-sm transition-opacity hover:opacity-100"
-                    style={{ color: 'var(--u-text-muted)', backgroundColor: 'color-mix(in srgb, var(--u-bg) 55%, transparent)', opacity: 0.7 }}
-                >
-                    Photo: {credit.name} / Unsplash
-                </a>
-            )}
+            {/*
+              Attribution. Photographers get a link back to their Unsplash
+              profile because the licence asks for it and it is the decent
+              thing; imagery drawn for the platform has no profile to link to
+              and must not claim one — a credit pointing at a stranger's
+              account is worse than no credit at all.
+            */}
+            {credit &&
+                (credit.username ? (
+                    <a
+                        href={`https://unsplash.com/@${credit.username}?utm_source=inkfathom&utm_medium=referral`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={CREDIT_CLASS}
+                        style={CREDIT_STYLE}
+                    >
+                        Photo: {credit.name} / Unsplash
+                    </a>
+                ) : (
+                    <span className={CREDIT_CLASS} style={CREDIT_STYLE}>
+                        {credit.name}
+                    </span>
+                ))}
         </div>
     );
 }

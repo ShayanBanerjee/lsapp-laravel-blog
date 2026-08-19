@@ -5,10 +5,10 @@ namespace App\Models;
 use App\Support\ReadingPreferences;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -52,6 +52,7 @@ class User extends Authenticatable implements MustVerifyEmail
     {
         return [
             'email_verified_at' => 'datetime',
+            'orcid_linked_at' => 'datetime',
             'password' => 'hashed',
             'is_premium' => 'boolean',
             'reading_prefs' => 'array',
@@ -71,6 +72,36 @@ class User extends Authenticatable implements MustVerifyEmail
     public function follows(): HasMany
     {
         return $this->hasMany(Follow::class);
+    }
+
+    public function memberships(): HasMany
+    {
+        return $this->hasMany(Membership::class);
+    }
+
+    public function contributionsReceived(): HasMany
+    {
+        return $this->hasMany(Contribution::class, 'to_user_id');
+    }
+
+    public function payoutAccount(): HasOne
+    {
+        return $this->hasOne(PayoutAccount::class);
+    }
+
+    public function integrations(): HasMany
+    {
+        return $this->hasMany(Integration::class);
+    }
+
+    public function alerts(): HasMany
+    {
+        return $this->hasMany(Alert::class);
+    }
+
+    public function customThemes(): HasMany
+    {
+        return $this->hasMany(CustomTheme::class);
     }
 
     public function themeEntitlements(): HasMany
@@ -119,6 +150,20 @@ class User extends Authenticatable implements MustVerifyEmail
         return ReadingPreferences::normalize($this->reading_prefs);
     }
 
+    /**
+     * Publishing — and only publishing — is gated on a confirmed address.
+     *
+     * Drafting, reading, marking, letters and responses all stay open to an
+     * unverified account on purpose: someone who cannot try the product has no
+     * reason to come back and confirm. What verification actually buys is that
+     * nothing reaches a public URL, an RSS feed or a search index from an
+     * address nobody proved they own.
+     */
+    public function canPublish(): bool
+    {
+        return $this->hasVerifiedEmail();
+    }
+
     /** Free accounts see ads; paying removes them outright. */
     public function seesAds(): bool
     {
@@ -149,32 +194,5 @@ class User extends Authenticatable implements MustVerifyEmail
     {
         return $this->is_premium
             || $this->personas()->count() < self::FREE_PERSONA_LIMIT;
-    }
-
-    /**
-     * Abandoned signups: unverified, older than the grace window, and empty.
-     *
-     * The exclusions matter more than the rule. An account that holds *any*
-     * trace of a human — a persona, a draft, a mark, a letter, a response, a
-     * saved piece — is never a throwaway, and deleting it would destroy work.
-     * Social identities are excluded for a separate reason: a provider that
-     * does not assert a verified address (Facebook) leaves a perfectly real
-     * person sitting at `email_verified_at = null` forever, and they must not
-     * be swept up by a cleanup aimed at registration spam.
-     *
-     * @param  Builder<User>  $query
-     */
-    public function scopeAbandonedUnverified(Builder $query, int $days): void
-    {
-        $query->whereNull('email_verified_at')
-            ->where('created_at', '<', now()->subDays($days))
-            ->whereDoesntHave('socialIdentities')
-            ->whereDoesntHave('personas')
-            ->whereDoesntHave('posts')
-            ->whereDoesntHave('highlights')
-            ->whereDoesntHave('responses')
-            ->whereDoesntHave('lettersSent')
-            ->whereDoesntHave('lettersReceived')
-            ->whereDoesntHave('bookmarks');
     }
 }

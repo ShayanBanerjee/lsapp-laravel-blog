@@ -2,15 +2,20 @@
 
 namespace App\Providers;
 
+use App\Models\Post;
+use App\Models\Scopes\StandalonePostScope;
 use App\Support\Billing\BillingGateway;
 use App\Support\Billing\NullGateway;
 use App\Support\Billing\StripeGateway;
+use App\Support\Copy\CopyDetector;
+use App\Support\Copy\LocalCopyDetector;
 use App\Support\Moderation\LexiconModerator;
 use App\Support\Moderation\Moderator;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -34,12 +39,41 @@ class AppServiceProvider extends ServiceProvider
                 default => new LexiconModerator,
             };
         });
+
+        // Same shape as moderation: the local index compares against this
+        // platform only, and a hosted web-wide service can be bound here
+        // instead without any call site changing.
+        $this->app->bind(CopyDetector::class, function () {
+            return match (config('services.copy_detection.driver', 'local')) {
+                default => new LocalCopyDetector,
+            };
+        });
     }
 
     public function boot(): void
     {
         $this->configureModels();
         $this->configureRateLimiting();
+        $this->configureRouteBindings();
+    }
+
+    /**
+     * `{readable}` resolves any post, lesson or not.
+     *
+     * The interaction endpoints — marking, responding, letters, bookmarks —
+     * are shared between standalone writing and course lessons, and lessons
+     * are hidden from the default `{post}` binding by StandalonePostScope. This
+     * is the one place that opts out, so those four features work identically
+     * inside a course without a duplicate set of routes and controllers.
+     *
+     * Whether the caller may actually see what they resolved is still decided
+     * by PostPolicy at the controller, exactly as before.
+     */
+    private function configureRouteBindings(): void
+    {
+        Route::bind('readable', fn (string $slug) => Post::withoutGlobalScope(StandalonePostScope::class)
+            ->where('slug', $slug)
+            ->firstOrFail());
     }
 
     private function configureModels(): void
