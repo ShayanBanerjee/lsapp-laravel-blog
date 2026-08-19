@@ -1,8 +1,8 @@
 import { Editor } from '@/components/editor';
 import { Panel, Swatch } from '@/components/metal';
 import type { PersonaSummary } from '@/types';
-import { useForm } from '@inertiajs/react';
-import { ImagePlus, Loader2, Send, X } from 'lucide-react';
+import { router, useForm } from '@inertiajs/react';
+import { ImagePlus, Loader2, MailWarning, Send, X } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 
 interface PersonaOption {
@@ -14,6 +14,7 @@ interface PersonaOption {
 
 interface Props {
     personas: PersonaOption[];
+    canPublish?: boolean;
     post?: {
         slug: string;
         title: string;
@@ -24,7 +25,7 @@ interface Props {
     };
 }
 
-export function PostForm({ personas, post }: Props) {
+export function PostForm({ personas, canPublish = true, post }: Props) {
     const isEdit = Boolean(post);
 
     const {
@@ -168,13 +169,16 @@ export function PostForm({ personas, post }: Props) {
                     <div className="mt-3 grid grid-cols-2 gap-2">
                         {(['draft', 'published'] as const).map((status) => {
                             const active = data.status === status;
+                            const blocked = status === 'published' && !canPublish;
 
                             return (
                                 <button
                                     key={status}
                                     type="button"
+                                    disabled={blocked}
+                                    title={blocked ? 'Confirm your email address to publish' : undefined}
                                     onClick={() => setData('status', status)}
-                                    className="rounded-[9px] border px-3 py-2 text-sm capitalize transition-colors"
+                                    className="rounded-[9px] border px-3 py-2 text-sm capitalize transition-colors disabled:cursor-not-allowed disabled:opacity-45"
                                     style={{
                                         borderColor: active ? 'var(--u-accent)' : 'var(--u-border)',
                                         backgroundColor: active ? 'var(--u-accent-soft)' : 'transparent',
@@ -189,6 +193,8 @@ export function PostForm({ personas, post }: Props) {
                     <p className="mt-3 text-xs" style={{ color: 'var(--u-text-muted)' }}>
                         Drafts are visible only to you.
                     </p>
+                    {errors.status && <Error message={errors.status} />}
+                    {!canPublish && <VerifyNotice />}
                 </Panel>
 
                 <button type="submit" disabled={processing} className="u-btn u-btn-primary py-3 text-base">
@@ -197,6 +203,35 @@ export function PostForm({ personas, post }: Props) {
                 </button>
             </aside>
         </form>
+    );
+}
+
+/**
+ * Shown when the account has not confirmed its address. Drafting is unaffected
+ * — only the publish switch is held — so the way out is one click, right here,
+ * rather than a hunt through settings.
+ */
+function VerifyNotice() {
+    const [sent, setSent] = useState(false);
+
+    return (
+        <div
+            className="mt-4 rounded-[9px] border p-3 text-xs leading-relaxed"
+            style={{ borderColor: 'var(--u-border)', color: 'var(--u-text-muted)' }}
+        >
+            <p className="flex items-start gap-2">
+                <MailWarning className="mt-0.5 size-3.5 shrink-0" style={{ color: 'var(--u-accent)' }} />
+                <span>Confirm your email address to publish. Drafts save normally in the meantime.</span>
+            </p>
+            <button
+                type="button"
+                disabled={sent}
+                onClick={() => router.post('/email/verification-notification', {}, { preserveScroll: true, onSuccess: () => setSent(true) })}
+                className="u-btn u-btn-ghost mt-3 w-full py-1.5 text-xs disabled:opacity-60"
+            >
+                {sent ? 'Link sent — check your inbox' : 'Send the link again'}
+            </button>
+        </div>
     );
 }
 

@@ -164,29 +164,6 @@ export function useParallax<T extends HTMLElement = HTMLDivElement>(strength = 9
 }
 
 /**
- * Progress through a tall element, 0 at its top and 1 once its bottom reaches
- * the viewport bottom. The clock for scroll-driven scenes.
- */
-export function useScrollProgress<T extends HTMLElement = HTMLDivElement>(steps = 1000) {
-    const [progress, setProgress] = useState(0);
-
-    const ref = useFrameTracked<T>(
-        (node) => {
-            const total = node.scrollHeight - window.innerHeight;
-            if (total <= 0) return 0;
-
-            const raw = -node.getBoundingClientRect().top / total;
-
-            // Quantise so state updates stop once the value is visually stable.
-            return Math.round(Math.min(1, Math.max(0, raw)) * steps);
-        },
-        (value) => setProgress(value / steps),
-    );
-
-    return [ref, progress] as const;
-}
-
-/**
  * Tracks the pointer within an element and writes its position to CSS custom
  * properties (--mx / --my, as percentages). Used to make the specular highlight
  * on metal actually follow the cursor instead of sweeping on a timer.
@@ -268,4 +245,74 @@ export function useCountUp(value: number, duration = 900) {
     }, [visible, value, duration]);
 
     return [ref, display] as const;
+}
+
+/**
+ * Leans an element very slightly toward the pointer.
+ *
+ * Writes `--u-mx` / `--u-my` as pixel offsets, which `.u-btn` consumes in its
+ * transform. Two decisions keep this from being a gimmick:
+ *
+ * - **The pull is capped low** (`strength`, default 4px). Past roughly six
+ *   pixels the element stops feeling responsive and starts feeling like it is
+ *   avoiding the cursor.
+ * - **Writes are coalesced into one per animation frame.** `pointermove` fires
+ *   far more often than the screen refreshes, and setting a custom property on
+ *   every event is how a hover effect ends up costing more than the page.
+ *
+ * No-ops entirely on touch (`hover: none`) and under reduced motion, where the
+ * offsets stay at zero and CSS forces the transform off anyway.
+ */
+export function useMagnetic<T extends HTMLElement = HTMLButtonElement>(strength = 4) {
+    const ref = useRef<T>(null);
+
+    useEffect(() => {
+        const node = ref.current;
+
+        if (!node) return;
+        if (prefersReducedMotion()) return;
+        if (typeof window === 'undefined' || !window.matchMedia('(hover: hover)').matches) return;
+
+        let frame = 0;
+        let x = 0;
+        let y = 0;
+
+        const write = () => {
+            frame = 0;
+            node.style.setProperty('--u-mx', `${x.toFixed(2)}px`);
+            node.style.setProperty('--u-my', `${y.toFixed(2)}px`);
+        };
+
+        const schedule = () => {
+            if (!frame) frame = window.requestAnimationFrame(write);
+        };
+
+        const onMove = (event: PointerEvent) => {
+            const rect = node.getBoundingClientRect();
+
+            // Offset from the centre, normalised to -1..1, then scaled. Using
+            // the centre rather than the edge keeps the pull symmetrical on
+            // wide buttons.
+            x = ((event.clientX - rect.left) / rect.width - 0.5) * 2 * strength;
+            y = ((event.clientY - rect.top) / rect.height - 0.5) * 2 * strength;
+            schedule();
+        };
+
+        const onLeave = () => {
+            x = 0;
+            y = 0;
+            schedule();
+        };
+
+        node.addEventListener('pointermove', onMove);
+        node.addEventListener('pointerleave', onLeave);
+
+        return () => {
+            node.removeEventListener('pointermove', onMove);
+            node.removeEventListener('pointerleave', onLeave);
+            if (frame) window.cancelAnimationFrame(frame);
+        };
+    }, [strength]);
+
+    return ref;
 }

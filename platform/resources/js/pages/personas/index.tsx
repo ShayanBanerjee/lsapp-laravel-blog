@@ -20,9 +20,10 @@ interface Props {
     universes: UniversePreview[];
     canCreate: boolean;
     personaLimit: number | null;
+    handles: { vanityMaxLength: number; canClaimVanity: boolean };
 }
 
-export default function PersonasIndex({ personas, universes, canCreate, personaLimit }: Props) {
+export default function PersonasIndex({ personas, universes, canCreate, personaLimit, handles }: Props) {
     const [creating, setCreating] = useState(false);
 
     return (
@@ -57,7 +58,7 @@ export default function PersonasIndex({ personas, universes, canCreate, personaL
                 )}
             </p>
 
-            {creating && canCreate && <CreateForm universes={universes} onDone={() => setCreating(false)} />}
+            {creating && canCreate && <CreateForm universes={universes} handles={handles} onDone={() => setCreating(false)} />}
 
             {personas.length === 0 ? (
                 <EmptyState
@@ -135,7 +136,15 @@ export default function PersonasIndex({ personas, universes, canCreate, personaL
     );
 }
 
-function CreateForm({ universes, onDone }: { universes: UniversePreview[]; onDone: () => void }) {
+function CreateForm({
+    universes,
+    handles,
+    onDone,
+}: {
+    universes: UniversePreview[];
+    handles: { vanityMaxLength: number; canClaimVanity: boolean };
+    onDone: () => void;
+}) {
     const { data, setData, post, processing, errors, reset } = useForm({
         handle: '',
         display_name: '',
@@ -170,7 +179,13 @@ function CreateForm({ universes, onDone }: { universes: UniversePreview[]; onDon
                             onChange={(event) => setData('handle', event.target.value)}
                             placeholder="longlight"
                             className="u-field"
+                            aria-describedby="handle-help"
                         />
+                        <p id="handle-help" className="mt-2 text-xs" style={{ color: 'var(--u-text-muted)' }}>
+                            {handles.canClaimVanity
+                                ? `Yours to pick — including short ones, down to ${handles.vanityMaxLength} characters.`
+                                : `${handles.vanityMaxLength} characters or fewer is a premium handle. Anything longer is free.`}
+                        </p>
                         {errors.handle && <FieldError message={errors.handle} />}
                     </div>
                     <div>

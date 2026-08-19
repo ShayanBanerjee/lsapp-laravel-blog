@@ -28,6 +28,14 @@ Reset to a known state (drops everything, re-seeds the six universes and demo co
 php artisan migrate:fresh --seed
 ```
 
+Server-side rendering is enabled. To run the app with it:
+
+```bash
+composer run dev:ssr
+```
+
+That builds the SSR bundle and runs `php artisan inertia:start-ssr` alongside the server. Plain `composer run dev` skips SSR and client-renders, which is fine for most work — but anything touching a **page or layout** should be checked under SSR, because reading `window` at render time takes the SSR process down for every page and Inertia silently falls back to client rendering rather than erroring.
+
 Formatting and static checks — run these before finishing: `./vendor/bin/pint` (PHP), `npm run lint` (ESLint, autofixes), `npm run format` (Prettier), `npx tsc --noEmit` (types).
 
 Demo login: `writer@example.com` / `password` (premium, six personas).
@@ -135,9 +143,78 @@ Authorization is Policies (`PostPolicy`, `UniversePolicy`, `PersonaPolicy`), not
 - Custom component classes belong in `@layer components`. Unlayered CSS outranks every Tailwind utility, which silently breaks things like `md:hidden`.
 - Grid and flex children need `min-w-0` before `truncate` or `line-clamp` will actually shrink them; without it they refuse to go below their content width and blow the page out horizontally. `.u-root` carries `overflow-x: clip` as a backstop (`clip`, not `hidden`, so the sticky header survives) — but fix the real cause rather than relying on it.
 
+## Courses, and the one global scope
+
+**A lesson is a `Post`** with a `course_module_id`, not a row in a separate table. Lessons want everything writing already has here — marks, responses, letters, bookmarks, sanitisation, reading time, SEO — and a parallel table would mean reimplementing all of it and then keeping two implementations in step.
+
+The cost is that lessons must never appear where standalone writing is listed. That is handled by **`StandalonePostScope`**, a global scope on `Post` that hides them from every query by default. Reading lessons requires opting out explicitly:
+
+```php
+Post::withoutGlobalScope(StandalonePostScope::class)
+```
+
+`CourseModule::lessons()` and `Course::lessons()` already do, so ordinary course code never thinks about it. The default runs this way round on purpose: forgetting to *apply* a filter would publish something that should not be public, while forgetting to *remove* one merely hides something.
+
+`{readable}` is a route binding (registered in `AppServiceProvider`) that resolves any post, lesson or not. The interaction endpoints — highlights, responses, letters, bookmarks — use it so a lesson supports all four without a duplicate set of routes.
+
+## Storytelling blocks
+
+Stored as one `<figure data-story="…">` carrying **scalar attributes and no children**, and expanded into full markup at render time by `StoryBlocks::expand()`. That split is what makes rich blocks safe in a body rendered with `dangerouslySetInnerHTML`: the only thing ever validated on write is a fixed set of scalars, and the HTML a reader receives is generated from escaped values.
+
+`halo`-style free-form values are never accepted from the client — the author picks a named shape and the gradient is composed server-side.
+
+Expansion must stay **deterministic**. Marks are anchored by block index into the rendered body, so restructuring an existing block type would move every mark after it. Add new types; do not reshape old ones.
+
+## Two design systems, one bridge
+
+The product's own tokens (`--u-*`) and the starter kit's shadcn set both exist.
+They are reconciled in `app.css` by remapping the shadcn tokens onto universe
+tokens **inside `.u-root`**.
+
+The subtlety, which has its own test: Tailwind v4 declares
+`--color-background: var(--background)` at `:root`, and a custom property is
+substituted where it is *declared*, not where it is used. Redefining
+`--background` deeper in the tree therefore never reaches `bg-background` —
+only redefining `--color-background` does. Both families are set. Deleting the
+"duplicate" block reintroduces invisible text on every auth form.
+
+## Money
+
+Everything in `App\Support\Earnings`. Three rules, all enforced in code and asserted in tests:
+
+1. **No floats, anywhere.** Every amount is an integer in minor units with an explicit currency. `0.1 + 0.2 !== 0.3`, and a platform that computes a revenue share in floats will eventually owe someone a fraction of a penny it cannot account for.
+2. **`platformFee + writerNet === gross`, exactly.** `RevenueSplit` derives the writer's share by *subtraction* rather than a second multiplication, so the two halves cannot drift by a rounding unit. `RevenueSplitTest` asserts this exhaustively for every amount from 1p to £100.
+3. **Rounding favours the writer.** The fee floors; the spare penny goes to the person who wrote the thing.
+
+The platform pays card fees out of its own 25%, not off the top. That is what keeps a £1 tip worth making — see the class comment for the arithmetic.
+
+`Ledger` computes balances from the transaction rows rather than caching a running total on the user, and separates **lifetime / clearing / available** deliberately: paying out inside the chargeback window means reclaiming money from a writer who has already been told it is theirs.
+
+`Contributions::settle()` is idempotent. Processors retry webhooks; a second delivery must not pay twice. The `provider_ref` unique index is the hard guarantee.
+
+## The research studio
+
+`App\Support\Academic\Venues`. **Nothing here submits to a publisher, and nothing can** — IEEE, ACM, Springer Nature and Nature all receive manuscripts through editorial systems that publish no third-party submission API. The page says so, in those words.
+
+What it does is remove the day of reformatting: `SubmissionPackage` builds a zip containing the manuscript in the venue's own LaTeX class, a DOCX, BibTeX, the metadata their portal asks for field by field, a cover-letter draft with visible gaps, and a checklist.
+
+Two rules when adding a venue:
+
+- **The checklist is phrased as things to confirm, never as facts about current rules.** Author guidelines change, and a stale requirement stated confidently is worse than none. Every venue carries a live `guidelinesUrl` and the UI says the publisher's guide is authoritative.
+- **Never invent a field.** The corresponding-author email is left `null` in `metadata.json` rather than guessed, because a portal rejects a wrong one and an obvious gap is better than a plausible error.
+
+## Motion and the design system
+
+The display face is **Fraunces**, driven on its `SOFT`, `WONK` and `opsz` axes — `.font-display`, `.font-display-sm`, `.font-brand` in `app.css`. The axes are the identity; a static face at three sizes would look like every other publication.
+
+Buttons (`.u-btn`) do four things on interaction — lift, specular sweep, magnetic lean, press — all transform/opacity only, so they run on the compositor and never trigger layout. `useMagnetic` writes `--u-mx`/`--u-my`, coalesced to one write per frame. All four are neutralised under `prefers-reduced-motion`, where the button keeps its colours and loses its movement.
+
+**The Deep Field's zoom does not go through React.** `useDeepZoom` writes `transform` and `opacity` directly onto the layer elements in a rAF loop; React renders the stage once and is only told when the integer layer changes (~6 times for the whole descent). Rendering it from state reconciled the entire stage sixty times a second and was the reason it stuttered. Measured after the change: 16.7ms median frame, zero frames over 32ms across a full descent.
+
+Layers stay mounted for the whole descent and are hidden with `visibility` rather than unmounted — unmounting meant re-decoding a photograph at exactly the moment of transition, which is when a hitch is most visible.
+
 ## Known gaps
 
-- **SSR is not enabled.** Post content currently reaches the browser only inside the `data-page` JSON, not as server-rendered HTML. For a blog this is the most consequential thing still outstanding — it needs a `resources/js/ssr.tsx` entry, `npm run build:ssr`, and a running `php artisan inertia:start-ssr` process.
-- **Billing is a stub.** `UpgradeController::activate()` flips `users.is_premium` with no payment taken, and is disabled the moment `services.stripe.secret` is set. Real billing means Laravel Cashier plus a webhook writing `theme_entitlements` rows — the access-control code should not need to change.
-- The custom theme editor and vanity handles are advertised on `/upgrade` but not built.
-- Follows are recorded but there is no feed built from them yet.
+- **Billing is a stub.** `UpgradeController::activate()` flips `users.is_premium` with no payment taken, and is disabled the moment `services.stripe.secret` is set. Contributions settle inline in demo mode and say so. Real billing means Stripe Checkout for premium, Stripe Connect for payouts, and a webhook calling the existing `Contributions::settle()` — the ledger, split, hold period and payout threshold are already built and tested.
+- **Copy detection is platform-local.** `LocalCopyDetector` compares against everything published here and nothing else. Web-wide detection needs a third-party index; `CopyDetector` is an interface bound in the container for exactly that swap.
+- **No staff role.** Moderation flags and copy flags are recorded and the author can dismiss flags on their own work, but there is no reviewer-facing queue.

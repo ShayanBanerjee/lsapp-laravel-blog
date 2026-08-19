@@ -3,6 +3,7 @@ import { LoaderCircle } from 'lucide-react';
 import { FormEventHandler } from 'react';
 
 import InputError from '@/components/input-error';
+import { PasswordField } from '@/components/password-field';
 import { SocialButtons } from '@/components/social-buttons';
 import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
@@ -73,7 +74,7 @@ export default function Register() {
 
                     <div className="grid gap-2">
                         <Label htmlFor="password">Password</Label>
-                        <Input
+                        <PasswordField
                             id="password"
                             type="password"
                             required
@@ -89,7 +90,7 @@ export default function Register() {
 
                     <div className="grid gap-2">
                         <Label htmlFor="password_confirmation">Confirm password</Label>
-                        <Input
+                        <PasswordField
                             id="password_confirmation"
                             type="password"
                             required

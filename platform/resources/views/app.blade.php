@@ -53,7 +53,13 @@
 
         <link rel="icon" href="/favicon.svg" type="image/svg+xml">
         <link rel="preconnect" href="https://fonts.bunny.net">
-        <link href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600|instrument-serif:400,400i" rel="stylesheet" />
+        {{--
+            Fraunces is the display face and a deliberate identity choice: it is
+            a variable serif with optical-size, SOFT and WONK axes, so headlines
+            can carry genuine calligraphic character where a static face would
+            look like every other publication. Instrument Sans handles UI.
+        --}}
+        <link href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600,700|fraunces:300,400,500,600,700,900,400i,600i" rel="stylesheet" />
         {{-- Reader-selectable body faces. Loaded together so switching is instant and never flashes unstyled text. --}}
         <link href="https://fonts.bunny.net/css?family=literata:400,400i,600|source-serif-4:400,400i,600|newsreader:400,400i,600|lora:400,400i,600|inter:400,500,600|atkinson-hyperlegible:400,400i,700" rel="stylesheet" />
 

@@ -8,10 +8,11 @@ interface Props {
     isPremium: boolean;
     universes: UniversePreview[];
     freePersonaLimit: number;
+    vanityMaxLength: number;
     isStub: boolean;
 }
 
-export default function Upgrade({ isPremium, universes, freePersonaLimit, isStub }: Props) {
+export default function Upgrade({ isPremium, universes, freePersonaLimit, vanityMaxLength, isStub }: Props) {
     const { auth } = usePage<SharedData>().props;
 
     const free = [
@@ -19,13 +20,19 @@ export default function Upgrade({ isPremium, universes, freePersonaLimit, isStub
         `${freePersonaLimit} persona`,
         'Unlimited published pieces',
         'Full reading access to every world',
+        // Earning is not gated. Charging writers for the privilege of being
+        // paid would be the wrong business, and it would select for the
+        // writers who need it least.
+        'Tips and memberships from readers — you keep 75% on any plan',
     ];
 
     const premium = [
-        'All six universes',
+        `All ${universes.length} universes`,
         'Unlimited personas',
-        'Custom theme editor',
-        'Vanity handles for each persona',
+        'Custom theme editor — your palette, checked for readability',
+        `Short handles, down to ${vanityMaxLength} characters`,
+        'The research studio — submission packages for arXiv, IEEE, ACM, Springer Nature and Nature',
+        'No ads, anywhere',
         'Everything in free, forever',
     ];
 
@@ -115,7 +122,7 @@ export default function Upgrade({ isPremium, universes, freePersonaLimit, isStub
                             ) : isPremium ? (
                                 <div className="flex flex-col gap-3">
                                     <p className="text-center text-sm" style={{ color: 'var(--u-accent)' }}>
-                                        Premium is active — all six worlds are yours.
+                                        Premium is active — every world is yours.
                                     </p>
                                     {isStub && (
                                         <button

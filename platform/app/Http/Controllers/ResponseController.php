@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Post;
 use App\Models\Response;
+use App\Support\Alerts;
 use App\Support\HtmlSanitizer;
 use App\Support\Moderation\Moderator;
 use App\Support\UniverseContext;
@@ -13,9 +14,9 @@ use Illuminate\Validation\Rule;
 
 class ResponseController extends Controller
 {
-    public function store(Request $request, Post $post, Moderator $moderator): RedirectResponse
+    public function store(Request $request, Post $readable, Moderator $moderator): RedirectResponse
     {
-        $this->authorize('view', $post);
+        $this->authorize('view', $readable);
 
         $data = $request->validate([
             'body' => ['required', 'string', 'min:2', 'max:4000'],
@@ -23,11 +24,11 @@ class ResponseController extends Controller
                 'nullable',
                 // Scope the existence check to this post, or a crafted id could
                 // anchor a response to a passage in someone else's piece.
-                Rule::exists('highlights', 'id')->where('post_id', $post->id),
+                Rule::exists('highlights', 'id')->where('post_id', $readable->id),
             ],
             'parent_id' => [
                 'nullable',
-                Rule::exists('responses', 'id')->where('post_id', $post->id),
+                Rule::exists('responses', 'id')->where('post_id', $readable->id),
             ],
         ]);
 
@@ -48,8 +49,8 @@ class ResponseController extends Controller
             ])->withInput();
         }
 
-        Response::create([
-            'post_id' => $post->id,
+        $response = Response::create([
+            'post_id' => $readable->id,
             'user_id' => $request->user()->id,
             'persona_id' => UniverseContext::activePersona($request)?->id,
             'highlight_id' => $data['highlight_id'] ?? null,
@@ -62,7 +63,9 @@ class ResponseController extends Controller
             'flagged_at' => $verdict->needsReview() ? now() : null,
         ]);
 
-        return back(fallback: route('posts.show', $post))->with('success', 'Response posted.');
+        Alerts::responded($readable, $request->user(), UniverseContext::activePersona($request), $body);
+
+        return back(fallback: $readable->readUrl())->with('success', 'Response posted.');
     }
 
     public function destroy(Request $request, Response $response): RedirectResponse
@@ -72,6 +75,6 @@ class ResponseController extends Controller
         $post = $response->post;
         $response->delete();
 
-        return back(fallback: route('posts.show', $post))->with('success', 'Response removed.');
+        return back(fallback: $post->readUrl())->with('success', 'Response removed.');
     }
 }

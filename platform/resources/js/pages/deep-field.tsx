@@ -1,10 +1,11 @@
 import { Swatch } from '@/components/metal';
-import { prefersReducedMotion, useScrollProgress } from '@/hooks/use-motion';
+import { useDeepZoom } from '@/hooks/use-deep-zoom';
+import { prefersReducedMotion } from '@/hooks/use-motion';
 import { themeToCssVars } from '@/hooks/use-universe';
 import type { UniversePreview, UniverseTheme } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import { ArrowDown, ArrowUpRight } from 'lucide-react';
-import { useCallback, useEffect, useMemo } from 'react';
+import { useEffect, useMemo, type Ref } from 'react';
 
 interface Layer extends UniversePreview {
     altitude: string;
@@ -14,7 +15,7 @@ interface Layer extends UniversePreview {
 }
 
 /**
- * A single continuous zoom through six universes.
+ * A single continuous zoom through the universes that sit on a physical axis.
  *
  * Mechanism: the page is `layers × 100vh` tall purely to create scroll
  * distance. A sticky stage stays fixed while that distance is consumed, and
@@ -33,10 +34,7 @@ export default function DeepField({ layers }: { layers: Layer[] }) {
     return (
         <>
             <Head title="The Deep Field">
-                <meta
-                    name="description"
-                    content="One continuous descent from the space between stars to the bottom of the sea, through all six universes."
-                />
+                <meta name="description" content="One continuous descent from the space between stars to the bottom of the sea." />
             </Head>
             {reduced ? <StaticDescent layers={layers} /> : <ZoomDescent layers={layers} />}
         </>
@@ -48,26 +46,13 @@ export default function DeepField({ layers }: { layers: Layer[] }) {
  * ------------------------------------------------------------------ */
 
 function ZoomDescent({ layers }: { layers: Layer[] }) {
-    // Driven by a rAF loop rather than scroll events — see useScrollProgress.
-    const [scrollRef, progress] = useScrollProgress<HTMLDivElement>();
-    const depth = progress * layers.length;
-
-    // Which layer is "current" — drives the chrome colours and the readout.
-    const activeIndex = Math.min(layers.length - 1, Math.max(0, Math.round(depth - 0.5)));
+    /*
+     * The zoom is driven by direct DOM writes, not by React state — see
+     * useDeepZoom. React renders this stage once; only `activeIndex` re-renders
+     * it, and that changes about six times across the whole descent.
+     */
+    const { scrollRef, registerLayer, captionRef, hintRef, activeIndex, jumpTo } = useDeepZoom(layers.length);
     const active = layers[activeIndex] ?? layers[0];
-
-    const jumpTo = useCallback(
-        (index: number) => {
-            const node = scrollRef.current;
-            if (!node) return;
-            const total = node.scrollHeight - window.innerHeight;
-            const target = node.offsetTop + (total * (index + 0.5)) / layers.length;
-            window.scrollTo({ top: target, behavior: 'smooth' });
-        },
-        // scrollRef is a stable ref object, but listing it keeps the dependency
-        // check honest rather than silenced.
-        [layers.length, scrollRef],
-    );
 
     // Keyboard control: the descent must be operable without a scroll wheel.
     useEffect(() => {
@@ -90,40 +75,58 @@ function ZoomDescent({ layers }: { layers: Layer[] }) {
         <div
             className="u-root relative"
             data-universe={active?.slug}
-            style={{ ...themeToCssVars(active?.theme), backgroundColor: active?.swatch.bg }}
+            style={{
+                ...themeToCssVars(active?.theme),
+                backgroundColor: active?.swatch.bg,
+                // The ground colour crossfades between layers; everything else
+                // about the stage is written by the loop.
+                transition: 'background-color 700ms var(--u-ease)',
+            }}
         >
             <div ref={scrollRef} style={{ height: `${layers.length * 100}vh` }}>
-                <div className="sticky top-0 h-screen overflow-hidden">
-                    {layers.map((layer, index) => {
-                        // Distance of this layer from the current depth.
-                        const local = depth - index;
-
-                        // Cull anything outside the visible band — at six layers
-                        // this is cheap, but it keeps the compositor honest.
-                        if (local < -1.15 || local > 1.15) return null;
-
-                        // Exponential growth is what sells a continuous zoom:
-                        // a linear scale reads as six separate slides.
-                        const scale = Math.pow(2, local);
-                        const opacity = local < 0 ? Math.max(0, 1 + local / 1.1) : Math.max(0, 1 - local / 0.95);
-
-                        return (
-                            <figure
-                                key={layer.slug}
-                                aria-hidden={index !== activeIndex}
-                                className="absolute inset-0 m-0 will-change-transform"
-                                style={{ transform: `scale(${scale})`, opacity, zIndex: layers.length - index }}
-                            >
-                                <img src={layer.hero_image} alt="" className="size-full object-cover" decoding="async" />
-                                <div
-                                    className="absolute inset-0"
-                                    style={{
-                                        background: `radial-gradient(ellipse at center, transparent 42%, ${layer.swatch.bg}99 82%, ${layer.swatch.bg} 100%)`,
-                                    }}
-                                />
-                            </figure>
-                        );
-                    })}
+                <div className="sticky top-0 h-screen overflow-hidden" style={{ contain: 'paint' }}>
+                    {/*
+                      Every layer stays mounted for the whole descent. Unmounting
+                      them as they leave the band meant re-decoding a photograph
+                      at the exact moment of transition, which is precisely when
+                      a hitch is most visible.
+                    */}
+                    {layers.map((layer, index) => (
+                        <figure
+                            key={layer.slug}
+                            ref={registerLayer(index)}
+                            aria-hidden
+                            className="absolute inset-0 m-0"
+                            style={{
+                                zIndex: layers.length - index,
+                                // Promoted up front rather than on first paint,
+                                // so the compositor is not building a layer
+                                // mid-animation.
+                                willChange: 'transform, opacity',
+                                backfaceVisibility: 'hidden',
+                                transform: 'translateZ(0) scale(1)',
+                                opacity: 0,
+                                visibility: 'hidden',
+                            }}
+                        >
+                            <img
+                                src={layer.hero_image}
+                                alt=""
+                                className="size-full object-cover"
+                                decoding="async"
+                                // The first two are needed immediately; the rest
+                                // can wait, but all of them stay once loaded.
+                                loading={index < 2 ? 'eager' : 'lazy'}
+                                fetchPriority={index === 0 ? 'high' : 'auto'}
+                            />
+                            <div
+                                className="absolute inset-0"
+                                style={{
+                                    background: `radial-gradient(ellipse at center, transparent 42%, ${layer.swatch.bg}99 82%, ${layer.swatch.bg} 100%)`,
+                                }}
+                            />
+                        </figure>
+                    ))}
 
                     {/*
                       Legibility scrim, sized to the viewport rather than to the
@@ -144,17 +147,19 @@ function ZoomDescent({ layers }: { layers: Layer[] }) {
 
                     {/* Caption for the current depth, above every layer. */}
                     <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center px-6">
-                        <Caption layer={active} depth={depth} index={activeIndex} />
+                        <Caption ref={captionRef} layer={active} index={activeIndex} />
                     </div>
 
                     <DepthRail layers={layers} activeIndex={activeIndex} onJump={jumpTo} />
 
-                    {depth < 0.35 && (
-                        <div className="pointer-events-none absolute inset-x-0 bottom-8 z-50 flex flex-col items-center gap-2 text-white/70">
-                            <span className="text-[11px] font-semibold tracking-[0.2em] uppercase">Scroll to descend</span>
-                            <ArrowDown className="size-4 animate-bounce" />
-                        </div>
-                    )}
+                    <div
+                        ref={hintRef as Ref<HTMLDivElement>}
+                        className="pointer-events-none absolute inset-x-0 bottom-8 z-50 flex flex-col items-center gap-2 text-white/70"
+                        style={{ transition: 'opacity 400ms var(--u-ease)' }}
+                    >
+                        <span className="text-[11px] font-semibold tracking-[0.2em] uppercase">Scroll to descend</span>
+                        <ArrowDown className="size-4 animate-bounce" />
+                    </div>
                 </div>
             </div>
 
@@ -163,22 +168,22 @@ function ZoomDescent({ layers }: { layers: Layer[] }) {
     );
 }
 
-/** The text for one depth, cross-fading as you pass through. */
-function Caption({ layer, depth, index }: { layer: Layer; depth: number; index: number }) {
-    /*
-     * Hold the caption at full strength through most of a layer, then fade it
-     * out as the next one arrives, so text is never competing with a photograph
-     * that is mid-transition.
-     *
-     * `local < 0` is clamped to full opacity deliberately: it is the state at
-     * rest on the very first layer, and a symmetric fade would leave the
-     * opening caption invisible until the reader had already scrolled.
-     */
-    const local = depth - index;
-    const opacity = local < 0 ? 1 : Math.max(0, 1 - Math.pow(Math.max(0, local - 0.55) / 0.45, 2));
-
+/**
+ * The text for one depth.
+ *
+ * Its opacity is written by the zoom loop rather than re-rendered, for the
+ * same reason the layers are — see useDeepZoom. The fade holds the caption at
+ * full strength through most of a layer and clears it as the next arrives, so
+ * text never competes with a photograph that is mid-transition.
+ */
+function Caption({ layer, index, ref }: { layer: Layer; index: number; ref: Ref<HTMLElement> }) {
     return (
-        <div className="relative max-w-2xl text-center transition-opacity duration-200" style={{ opacity }}>
+        <div
+            key={index}
+            ref={ref as Ref<HTMLDivElement>}
+            className="relative max-w-2xl text-center"
+            style={{ opacity: 1, transition: 'opacity 120ms linear' }}
+        >
             <div className="relative" style={{ textShadow: '0 2px 24px rgb(0 0 0 / 0.85), 0 1px 3px rgb(0 0 0 / 0.7)' }}>
                 <p className="mb-3 text-[11px] font-semibold tracking-[0.24em] text-white/70 uppercase">{layer.measure}</p>
                 <h2 className="font-display text-4xl leading-tight text-white sm:text-6xl">{layer.altitude}</h2>
@@ -267,9 +272,7 @@ function StaticDescent({ layers }: { layers: Layer[] }) {
         <div className="u-root" style={{ backgroundColor: layers[0]?.swatch.bg }}>
             <header className="mx-auto max-w-2xl px-6 pt-20 pb-12 text-center">
                 <h1 className="font-display text-5xl text-white">The Deep Field</h1>
-                <p className="mt-5 text-base text-white/75">
-                    A descent from the space between stars to the bottom of the sea, through all six universes.
-                </p>
+                <p className="mt-5 text-base text-white/75">A descent from the space between stars to the bottom of the sea.</p>
             </header>
 
             <div className="mx-auto max-w-2xl px-6 pb-24">

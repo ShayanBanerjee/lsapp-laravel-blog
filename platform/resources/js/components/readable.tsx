@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useStoryBlocks } from '@/hooks/use-story-blocks';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 export interface Passage {
     block_index: number;
@@ -173,6 +174,15 @@ export function Readable({
                 });
             });
     }, [html, passages, own]);
+
+    /*
+     * Storytelling blocks arrive as part of the body and are re-created by the
+     * repaint above, so their behaviour is attached after every repaint rather
+     * than once on mount.
+     */
+    const repaintKey = useMemo(() => `${html.length}:${passages.length}:${own.map((h) => h.id).join(',')}`, [html, passages, own]);
+
+    useStoryBlocks(containerRef, repaintKey);
 
     // Offer the mark control whenever there is a usable selection.
     const refreshSelection = useCallback(() => {

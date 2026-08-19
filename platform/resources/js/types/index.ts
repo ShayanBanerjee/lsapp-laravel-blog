@@ -44,6 +44,7 @@ export interface SharedData {
     universeIndex: UniversePreview[];
     reading: ReadingPreferences;
     socialProviders: string[];
+    unreadAlerts: number;
     flash: { success: string | null; error: string | null };
     [key: string]: unknown;
 }

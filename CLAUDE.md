@@ -106,6 +106,6 @@ These are pre-existing. Fix them rather than reproducing them — and when porti
 ## Notes
 
 - `config/services.php` contains a **Stripe placeholder block** from the Laravel 5.6 default skeleton. It is boilerplate — there is no payment code, no Cashier, and no Stripe env vars anywhere. Do not read it as evidence of an existing integration.
-- `readme.md` is the **stock unmodified Laravel framework README** with no project-specific content. This file is the real orientation document.
+- `README.md` at the repo root now describes **Inkfathom** (the app in `platform/`), not this legacy blog. It replaced the stock Laravel framework README. This file remains the orientation document for the legacy app specifically.
 - `.env` is not committed; only `.env.example` (MySQL defaults, Mailtrap placeholder, unused Redis/Pusher entries).
 - Post bodies are stored as **CKEditor HTML** and rendered with `{!! $post->body !!}` — unescaped. Treat body content as untrusted when changing how it is displayed or when moving to a new editor.

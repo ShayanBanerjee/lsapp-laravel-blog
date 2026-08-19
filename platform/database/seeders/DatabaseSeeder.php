@@ -13,6 +13,10 @@ class DatabaseSeeder extends Seeder
             CircleSeeder::class,
             CategorySeeder::class,
             DemoContentSeeder::class,
+            // After DemoContentSeeder — the course is taught by a persona it creates.
+            CourseSeeder::class,
+            // Last: it marks passages as the readers the demo seeder created.
+            FlagshipArticleSeeder::class,
         ]);
     }
 }

@@ -23,7 +23,7 @@ export default function Welcome({ featured, universes, stats }: Props) {
 
     return (
         <SiteLayout wide>
-            <Head title="Write in six worlds" />
+            <Head title="Write in seven worlds" />
 
             {/* Hero */}
             <section className="relative pt-6 pb-20 text-center sm:pt-10">

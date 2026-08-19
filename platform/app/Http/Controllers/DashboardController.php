@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CopyFlag;
 use App\Models\Highlight;
 use App\Models\Post;
 use App\Support\PostPresenter;
@@ -34,6 +35,32 @@ class DashboardController extends Controller
                 ->get(),
 
             'unreadLetters' => $user->lettersReceived()->whereNull('read_at')->count(),
+
+            /*
+             * Near-duplicate warnings on this writer's own pieces.
+             *
+             * Shown here and nowhere else. A flag is a probabilistic signal, so
+             * it belongs on the desk of the person who can act on it quietly —
+             * not in a public report, and not as a notification to the author
+             * of the piece it resembles.
+             */
+            'copyFlags' => CopyFlag::open()
+                ->whereIn('post_id', $user->posts()->select('id'))
+                ->with(['post:id,slug,title', 'matchedPost:id,slug,title,persona_id', 'matchedPost.persona:id,handle'])
+                ->latest()
+                ->limit(10)
+                ->get()
+                ->map(fn (CopyFlag $flag) => [
+                    'id' => $flag->id,
+                    'kind' => $flag->kind,
+                    'similarity' => $flag->similarity,
+                    'post' => ['slug' => $flag->post?->slug, 'title' => $flag->post?->title],
+                    'matched' => [
+                        'slug' => $flag->matchedPost?->slug,
+                        'title' => $flag->matchedPost?->title,
+                        'handle' => $flag->matchedPost?->persona?->handle,
+                    ],
+                ]),
 
             'stats' => [
                 'published' => $posts->where('status', 'published')->count(),

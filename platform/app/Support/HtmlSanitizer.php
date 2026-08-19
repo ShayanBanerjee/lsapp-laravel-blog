@@ -14,6 +14,45 @@ class HtmlSanitizer
 
     public static function clean(string $html): string
     {
+        /*
+         * Storytelling blocks are lifted out whole before anything else runs.
+         *
+         * Handling them tag-by-tag alongside the rest would validate the
+         * opening tag and leave the closing one behind as an orphan; and since
+         * a block's entire content lives in its attributes, the correct unit
+         * of decision is the element, not the tag.
+         */
+        /*
+         * The placeholder carries a fresh random nonce on every call.
+         *
+         * A fixed token would be forgeable: an author could type the literal
+         * placeholder into a paragraph and have arbitrary block markup
+         * substituted into it after sanitisation. A per-call nonce cannot be
+         * guessed by input that was written before the call began.
+         *
+         * (NUL delimiters were the obvious choice and do not work — strip_tags
+         * removes NUL bytes, so the marker would not survive to the reinsert.)
+         */
+        $nonce = bin2hex(random_bytes(8));
+        $placeholder = static fn (int $index): string => "@@story-{$nonce}-{$index}@@";
+
+        $blocks = [];
+        $html = preg_replace_callback(
+            '#<figure\b([^>]*)>.*?</figure\s*>#is',
+            static function (array $match) use (&$blocks, $placeholder): string {
+                $figure = StoryBlocks::sanitizeFigure($match[1]);
+
+                if ($figure === null) {
+                    return '';
+                }
+
+                $blocks[] = $figure.'</figure>';
+
+                return $placeholder(count($blocks) - 1);
+            },
+            $html
+        ) ?? $html;
+
         // strip_tags drops the tags but keeps their text, which would leave
         // script bodies sitting in the post as visible content. Remove these
         // elements together with everything inside them first.
@@ -49,7 +88,14 @@ class HtmlSanitizer
             $html
         );
 
-        return trim($html ?? '');
+        $html = trim($html ?? '');
+
+        // Put the validated blocks back where their placeholders sit.
+        foreach ($blocks as $index => $figure) {
+            $html = str_replace($placeholder($index), $figure, $html);
+        }
+
+        return $html;
     }
 
     /**

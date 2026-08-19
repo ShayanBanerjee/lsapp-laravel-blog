@@ -2,16 +2,17 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Support\ReadingPreferences;
 use Database\Factories\UserFactory;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-class User extends Authenticatable
+class User extends Authenticatable implements MustVerifyEmail
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
@@ -51,6 +52,7 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
+            'orcid_linked_at' => 'datetime',
             'password' => 'hashed',
             'is_premium' => 'boolean',
             'reading_prefs' => 'array',
@@ -70,6 +72,36 @@ class User extends Authenticatable
     public function follows(): HasMany
     {
         return $this->hasMany(Follow::class);
+    }
+
+    public function memberships(): HasMany
+    {
+        return $this->hasMany(Membership::class);
+    }
+
+    public function contributionsReceived(): HasMany
+    {
+        return $this->hasMany(Contribution::class, 'to_user_id');
+    }
+
+    public function payoutAccount(): HasOne
+    {
+        return $this->hasOne(PayoutAccount::class);
+    }
+
+    public function integrations(): HasMany
+    {
+        return $this->hasMany(Integration::class);
+    }
+
+    public function alerts(): HasMany
+    {
+        return $this->hasMany(Alert::class);
+    }
+
+    public function customThemes(): HasMany
+    {
+        return $this->hasMany(CustomTheme::class);
     }
 
     public function themeEntitlements(): HasMany
@@ -116,6 +148,20 @@ class User extends Authenticatable
     public function readingPreferences(): array
     {
         return ReadingPreferences::normalize($this->reading_prefs);
+    }
+
+    /**
+     * Publishing — and only publishing — is gated on a confirmed address.
+     *
+     * Drafting, reading, marking, letters and responses all stay open to an
+     * unverified account on purpose: someone who cannot try the product has no
+     * reason to come back and confirm. What verification actually buys is that
+     * nothing reaches a public URL, an RSS feed or a search index from an
+     * address nobody proved they own.
+     */
+    public function canPublish(): bool
+    {
+        return $this->hasVerifiedEmail();
     }
 
     /** Free accounts see ads; paying removes them outright. */

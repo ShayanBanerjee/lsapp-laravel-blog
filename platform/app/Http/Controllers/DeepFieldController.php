@@ -9,7 +9,12 @@ use Inertia\Response;
 
 /**
  * The Deep Field — one continuous descent from the space between stars to the
- * bottom of the sea, passing through all six universes on the way down.
+ * bottom of the sea.
+ *
+ * The descent is a physical axis, so it carries only the universes that sit on
+ * one. Signal — the machine room — is deliberately absent: there is no altitude
+ * at which a rack belongs between a treeline and a seabed, and forcing it in
+ * would break the one argument the page exists to make.
  *
  * It exists to make one argument that no paragraph could: scale is a choice,
  * and every scale has something worth writing about. It is also the honest

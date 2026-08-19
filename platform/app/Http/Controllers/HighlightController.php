@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\Highlight;
 use App\Models\Post;
+use App\Support\Alerts;
 use App\Support\HtmlSanitizer;
+use App\Support\UniverseContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
@@ -13,10 +15,10 @@ use Illuminate\Http\Request;
  */
 class HighlightController extends Controller
 {
-    public function store(Request $request, Post $post): RedirectResponse
+    public function store(Request $request, Post $readable): RedirectResponse
     {
         // You can only mark what you are allowed to read.
-        $this->authorize('view', $post);
+        $this->authorize('view', $readable);
 
         $data = $request->validate([
             'block_index' => ['required', 'integer', 'min:0', 'max:2000'],
@@ -32,9 +34,9 @@ class HighlightController extends Controller
         // firstOrCreate rather than create: the unique index already prevents
         // duplicates, and racing double-clicks should be idempotent rather than
         // a 500.
-        Highlight::firstOrCreate(
+        $highlight = Highlight::firstOrCreate(
             [
-                'post_id' => $post->id,
+                'post_id' => $readable->id,
                 'user_id' => $request->user()->id,
                 'block_index' => $data['block_index'],
                 'start_offset' => $data['start_offset'],
@@ -43,7 +45,19 @@ class HighlightController extends Controller
             ['quote' => $data['quote']],
         );
 
-        return back(fallback: route('posts.show', $post))->with('success', 'Passage marked.');
+        // Only on the first mark of this passage — re-posting an existing mark
+        // is idempotent above and must be idempotent here too, or a repeated
+        // request would inflate the author's count.
+        if ($highlight->wasRecentlyCreated) {
+            Alerts::markedPassage(
+                $readable,
+                $request->user(),
+                UniverseContext::activePersona($request),
+                $data['quote'],
+            );
+        }
+
+        return back(fallback: $readable->readUrl())->with('success', 'Passage marked.');
     }
 
     public function destroy(Request $request, Highlight $highlight): RedirectResponse
@@ -53,6 +67,6 @@ class HighlightController extends Controller
         $post = $highlight->post;
         $highlight->delete();
 
-        return back(fallback: route('posts.show', $post))->with('success', 'Mark removed.');
+        return back(fallback: $post->readUrl())->with('success', 'Mark removed.');
     }
 }

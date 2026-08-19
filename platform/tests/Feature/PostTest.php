@@ -220,4 +220,31 @@ class PostTest extends TestCase
 
         $this->assertDatabaseMissing('posts', ['title' => 'Impersonation']);
     }
+
+    public function test_a_storytelling_block_round_trips_and_is_expanded_for_readers(): void
+    {
+        [$user, $persona] = $this->writer();
+
+        $this->actingAs($user)->post('/posts', [
+            'title' => 'A piece with a callout',
+            'body' => '<p>Before.</p><figure data-story="callout" data-value="87%" data-label="of drafts are never published"></figure>',
+            'persona_id' => $persona->id,
+            'status' => 'published',
+        ])->assertSessionHasNoErrors();
+
+        $post = Post::firstOrFail();
+
+        // Stored compact…
+        $this->assertStringContainsString('data-story="callout"', $post->body);
+        $this->assertStringNotContainsString('u-story-callout', $post->body);
+
+        // …expanded for readers…
+        $this->get('/posts/'.$post->slug)
+            ->assertInertia(fn ($page) => $page->where('post.body', fn (string $body) => str_contains($body, 'u-story-callout')));
+
+        // …and handed back to the editor in the form TipTap can parse.
+        $this->actingAs($user)->get('/posts/'.$post->slug.'/edit')
+            ->assertInertia(fn ($page) => $page->where('post.body', fn (string $body) => str_contains($body, 'data-story="callout"')
+                && ! str_contains($body, 'u-story-callout')));
+    }
 }

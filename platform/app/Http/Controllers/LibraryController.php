@@ -49,10 +49,10 @@ class LibraryController extends Controller
         ]);
     }
 
-    public function toggle(Request $request, Post $post): RedirectResponse
+    public function toggle(Request $request, Post $readable): RedirectResponse
     {
         // You can only shelve what you are allowed to read.
-        $this->authorize('view', $post);
+        $this->authorize('view', $readable);
 
         $data = $request->validate([
             'kind' => ['required', Rule::in([Bookmark::SAVED, Bookmark::STARRED])],
@@ -60,7 +60,7 @@ class LibraryController extends Controller
 
         $existing = Bookmark::where([
             'user_id' => $request->user()->id,
-            'post_id' => $post->id,
+            'post_id' => $readable->id,
             'kind' => $data['kind'],
         ])->first();
 
@@ -74,7 +74,7 @@ class LibraryController extends Controller
         // unique-constraint 500.
         Bookmark::firstOrCreate([
             'user_id' => $request->user()->id,
-            'post_id' => $post->id,
+            'post_id' => $readable->id,
             'kind' => $data['kind'],
         ]);
 

@@ -7,6 +7,7 @@ use App\Support\ReadingPreferences;
 use App\Support\UniverseContext;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
+use Tighten\Ziggy\Ziggy;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -63,6 +64,7 @@ class HandleInertiaRequests extends Middleware
             'activeUniverse' => UniverseContext::serialize(
                 UniverseContext::activeUniverse($request),
                 $user,
+                $activePersona,
             ),
             // Identity + swatch only — never the full token set for locked worlds.
             'universeIndex' => fn () => Universe::cachedAll()->map(fn (Universe $universe) => [
@@ -82,6 +84,29 @@ class HandleInertiaRequests extends Middleware
             'socialProviders' => collect(['google', 'facebook', 'github'])
                 ->filter(fn (string $p) => filled(config("services.{$p}.client_id")))
                 ->values(),
+
+            /*
+             * The unread badge.
+             *
+             * Wrapped in a closure so it is only evaluated for full page
+             * loads and partial reloads that actually ask for it — every
+             * response otherwise pays for a count query it never renders.
+             */
+            'unreadAlerts' => fn () => $user?->alerts()->unread()->count() ?? 0,
+
+            /*
+             * Ziggy's route table, as a prop.
+             *
+             * The @routes Blade directive puts this on `window` for the
+             * browser, but server-side rendering runs before Blade and has no
+             * window — so the SSR entry reads it from here instead. `location`
+             * comes from the request because route(..., absolute: true) needs
+             * an origin and there is no address bar to take one from.
+             */
+            'ziggy' => fn () => [
+                ...(new Ziggy)->toArray(),
+                'location' => $request->url(),
+            ],
 
             'flash' => [
                 'success' => $request->session()->get('success'),

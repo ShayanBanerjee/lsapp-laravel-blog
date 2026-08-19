@@ -190,4 +190,60 @@ class QueryBudgetTest extends TestCase
 
         $this->assertLessThan(12, $count, "Circle index used {$count} queries.");
     }
+
+    public function test_the_following_feed_does_not_fan_out(): void
+    {
+        $reader = User::factory()->create();
+
+        $this->seedPosts(3);
+        Persona::firstOrFail()->followers()->create(['user_id' => $reader->id]);
+
+        $small = $this->countQueries(fn () => $this->actingAs($reader)->get('/following')->assertOk());
+
+        $this->seedPosts2(9);
+        Persona::latest('id')->firstOrFail()->followers()->create(['user_id' => $reader->id]);
+
+        $large = $this->countQueries(fn () => $this->actingAs($reader)->get('/following')->assertOk());
+
+        $this->assertLessThanOrEqual(
+            $small,
+            $large,
+            "Following-feed query count grew from {$small} to {$large} — that is an N+1."
+        );
+    }
+
+    public function test_a_profile_does_not_fan_out(): void
+    {
+        $this->seedPosts(3);
+        $handle = Persona::firstOrFail()->handle;
+
+        $small = $this->countQueries(fn () => $this->get("/@{$handle}")->assertOk());
+
+        // More work by the same voice: the page must cost the same to render.
+        $this->seedPostsFor(Persona::firstOrFail(), 9);
+
+        $large = $this->countQueries(fn () => $this->get("/@{$handle}")->assertOk());
+
+        $this->assertLessThanOrEqual(
+            $small,
+            $large,
+            "Profile query count grew from {$small} to {$large} — that is an N+1."
+        );
+    }
+
+    private function seedPostsFor(Persona $persona, int $count): void
+    {
+        foreach (range(1, $count) as $index) {
+            Post::create([
+                'user_id' => $persona->user_id,
+                'persona_id' => $persona->id,
+                'universe_id' => $persona->universe_id,
+                'slug' => "more-{$index}",
+                'title' => "More {$index}",
+                'body' => '<p>Body.</p>',
+                'status' => 'published',
+                'published_at' => now()->subDays($index),
+            ]);
+        }
+    }
 }

@@ -160,6 +160,43 @@ class UniverseSeeder extends Seeder
                     'scheme' => 'light',
                 ],
             ],
+            [
+                /*
+                 * Signal — the seventh universe, and the proof of the claim.
+                 *
+                 * Adding a world is supposed to be a row here and nothing else.
+                 * This one was added last and needed exactly that: no component
+                 * branches on it, no CSS was written for it, and its palette is
+                 * checked against the same contrast floor as the other six.
+                 *
+                 * Its imagery is *drawn*, not photographed — see the SVGs under
+                 * public/images. The bundled photography is all landscape, and a
+                 * machine room pulled off a web search would be someone else's
+                 * copyrighted work. Vector also happens to be the right medium
+                 * for the subject.
+                 */
+                'slug' => 'signal',
+                'hero_image' => '/images/universes/signal-hero.svg',
+                'hero_credit' => ['name' => 'Drawn for Inkfathom', 'username' => null],
+                'name' => 'Signal',
+                'tagline' => 'Clocked, cooled, and humming.',
+                'description' => 'The machine room. Write about the systems we built to think with — what they assume, where they leak, and what they cost when nobody is looking.',
+                'material' => 'anodised aluminium & phosphor glass',
+                'is_premium' => true,
+                'sort_order' => 7,
+                'theme' => [
+                    'bg' => '#05080d', 'bgDeep' => '#020406',
+                    'surface1' => '#0d1218', 'surface2' => '#151f29',
+                    'border' => '#26384a', 'text' => '#e6f1f7', 'textMuted' => '#9db4c4',
+                    'accent' => '#3ddbd9', 'accentFg' => '#02201f', 'accentSoft' => '#3ddbd92e',
+                    'metalBase' => '#1a2734', 'metalSheen' => '#cfe9f4',
+                    'metalEdge' => '#5b8299', 'metalShadow' => '#000203',
+                    // Vertical, like the brushed face of a rack panel.
+                    'grainAngle' => '90deg', 'glow' => '#3ddbd9',
+                    'halo' => 'radial-gradient(ellipse 120% 70% at 50% -10%, #1a8f9440, transparent 65%)',
+                    'scheme' => 'dark',
+                ],
+            ],
         ];
     }
 }
